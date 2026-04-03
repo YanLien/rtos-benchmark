@@ -12,7 +12,8 @@ set(AVAILABLE_TESTS
 
 set(AVAILABLE_RTOSES
     zephyr
-    freertos)
+    freertos
+    freertos_aarch64)
 
 set(ITERATIONS 10000 CACHE STRING "Number of iterations for each test")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DITERATIONS=${ITERATIONS}")
@@ -21,7 +22,7 @@ set(CALIBRATION_LOOPS 10000 CACHE STRING "Number of calibration loops for each t
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCALIBRATION_LOOPS=${CALIBRATION_LOOPS}")
 
 if (NOT RTOS IN_LIST AVAILABLE_RTOSES)
-    message(FATAL_ERROR "Choose either [zephyr] or [freertos]")
+    message(FATAL_ERROR "Choose one of [zephyr], [freertos], or [freertos_aarch64]")
 endif()
 
 # Add include directory for bench_api.h and bench_utils.h
