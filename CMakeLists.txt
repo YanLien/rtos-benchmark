@@ -13,7 +13,8 @@ set(AVAILABLE_TESTS
 set(AVAILABLE_RTOSES
     zephyr
     freertos
-    freertos_aarch64)
+    freertos_aarch64
+    freertos_aarch64_qemu)
 
 set(ITERATIONS 10000 CACHE STRING "Number of iterations for each test")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DITERATIONS=${ITERATIONS}")
@@ -22,15 +23,21 @@ set(CALIBRATION_LOOPS 10000 CACHE STRING "Number of calibration loops for each t
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCALIBRATION_LOOPS=${CALIBRATION_LOOPS}")
 
 if (NOT RTOS IN_LIST AVAILABLE_RTOSES)
-    message(FATAL_ERROR "Choose one of [zephyr], [freertos], or [freertos_aarch64]")
+    message(FATAL_ERROR "Choose one of [zephyr], [freertos], [freertos_aarch64], or [freertos_aarch64_qemu]")
 endif()
 
 # Add include directory for bench_api.h and bench_utils.h
 include_directories(h)
 
 # Include any ${RTOS} specific build rules
-include(src/${RTOS}/${RTOS}.cmake)
-add_subdirectory(src/${RTOS})
+# freertos_aarch64_qemu reuses the freertos_aarch64 directory
+if (RTOS STREQUAL "freertos_aarch64_qemu")
+    include(src/freertos_aarch64/freertos_aarch64_qemu.cmake)
+    add_subdirectory(src/freertos_aarch64)
+else()
+    include(src/${RTOS}/${RTOS}.cmake)
+    add_subdirectory(src/${RTOS})
+endif()
 
 project(bench)
 

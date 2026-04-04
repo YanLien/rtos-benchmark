@@ -4,6 +4,16 @@
  * Context switching and interrupt handling for ARMv8-A with GICv3.
  * Uses ICC_*_EL1 system registers for GIC access.
  *
+ * Context layout on each task's SP_EL0 stack (from top/low addr to bottom/high addr):
+ *   FPU flag
+ *   critical nesting
+ *   SPSR_EL1, ELR_EL1
+ *   X30, XZR
+ *   X28, X29
+ *   ...
+ *   X2, X3
+ *   X0, X1          (task's actual register values)
+ *
  * SPDX-License-Identifier: MIT
  */
 
@@ -82,7 +92,7 @@
  * Assumes x1 points to the top of the stack.
  */
 .macro saveallgpregisters
-    /* x0 and x1 are handled separately */
+    /* x0 and x1 are saved separately before this macro */
     stp     x2, x3, [x1, #-16]!
     stp     x4, x5, [x1, #-16]!
     stp     x6, x7, [x1, #-16]!
@@ -128,100 +138,178 @@
 /*-----------------------------------------------------------*/
 
 /*
- * Save the current task context to the stack.
+ * Save the current task context to the task stack (SP_EL0).
  */
 .macro portSAVE_CONTEXT
-    /* Save the current SP to x0, then save x0 and x1 to the stack */
-    mov     x0, sp
-    stp     x0, x1, [sp, #-16]!
-    mov     x1, sp
+    /* Switch to use the EL0 stack pointer. */
+    msr     SPSEL, #0
 
-    /* Save remaining GP registers */
-    saveallgpregisters
+    /* Save the full general-purpose register state. */
+    stp     x0, x1, [sp, #-0x10]!
+    stp     x2, x3, [sp, #-0x10]!
+    stp     x4, x5, [sp, #-0x10]!
+    stp     x6, x7, [sp, #-0x10]!
+    stp     x8, x9, [sp, #-0x10]!
+    stp     x10, x11, [sp, #-0x10]!
+    stp     x12, x13, [sp, #-0x10]!
+    stp     x14, x15, [sp, #-0x10]!
+    stp     x16, x17, [sp, #-0x10]!
+    stp     x18, x19, [sp, #-0x10]!
+    stp     x20, x21, [sp, #-0x10]!
+    stp     x22, x23, [sp, #-0x10]!
+    stp     x24, x25, [sp, #-0x10]!
+    stp     x26, x27, [sp, #-0x10]!
+    stp     x28, x29, [sp, #-0x10]!
+    stp     x30, xzr, [sp, #-0x10]!
 
-    /* Save SPSR and ELR (return address) */
-    mrs     x2, spsr_el1
-    mrs     x3, elr_el1
-    stp     x3, x2, [x1, #-16]!
+    /* Save exception state. */
+    mrs     x3, SPSR_EL1
+    mrs     x2, ELR_EL1
+    stp     x2, x3, [sp, #-0x10]!
 
-    /* Save critical nesting count */
-    ldr     x2, =ullCriticalNesting
-    ldr     x2, [x2]
-    str     x2, [x1, #-8]!
+    /* Save critical nesting and FPU indicator. */
+    ldr     x0, =ullCriticalNesting
+    ldr     x3, [x0]
+    ldr     x0, =ullPortTaskHasFPUContext
+    ldr     x2, [x0]
 
-    /* Save FPU context flag */
-    ldr     x2, =ullPortTaskHasFPUContext
-    ldr     x2, [x2]
-    str     x2, [x1, #-8]!
-
-    /* If FPU context is present, save FPU registers */
     cbz     x2, 1f
-    mov     x0, x1
-    sub     x1, x1, #(32 * 16)    /* Space for 32 x 128-bit Q registers */
-    savefloatregisters
+    stp     q0, q1, [sp, #-0x20]!
+    stp     q2, q3, [sp, #-0x20]!
+    stp     q4, q5, [sp, #-0x20]!
+    stp     q6, q7, [sp, #-0x20]!
+    stp     q8, q9, [sp, #-0x20]!
+    stp     q10, q11, [sp, #-0x20]!
+    stp     q12, q13, [sp, #-0x20]!
+    stp     q14, q15, [sp, #-0x20]!
+    stp     q16, q17, [sp, #-0x20]!
+    stp     q18, q19, [sp, #-0x20]!
+    stp     q20, q21, [sp, #-0x20]!
+    stp     q22, q23, [sp, #-0x20]!
+    stp     q24, q25, [sp, #-0x20]!
+    stp     q26, q27, [sp, #-0x20]!
+    stp     q28, q29, [sp, #-0x20]!
+    stp     q30, q31, [sp, #-0x20]!
 1:
-    /* Store the new top of stack in the TCB */
-    ldr     x2, =pxCurrentTCB
-    ldr     x2, [x2]
-    str     x1, [x2]
+    stp     x2, x3, [sp, #-0x10]!
+
+    /* Save the new task-stack top in the TCB. */
+    ldr     x0, =pxCurrentTCB
+    ldr     x1, [x0]
+    mov     x0, sp
+    str     x0, [x1]
+
+    /* Switch back to the EL1 exception stack. */
+    msr     SPSEL, #1
 .endm
 
 /*-----------------------------------------------------------*/
 
 /*
- * Restore a task context from the stack.
+ * Restore a task context from the task stack (SP_EL0).
  */
 .macro portRESTORE_CONTEXT
-    /* Get the top of stack from the TCB */
+    /* Switch to use the EL0 stack pointer. */
+    msr     SPSEL, #0
+
+    /* Set SP to the task stack recorded in the TCB. */
     ldr     x0, =pxCurrentTCB
-    ldr     x0, [x0]
     ldr     x1, [x0]
-
-    /* Check if FPU context is present */
-    ldr     x2, [x1], #8
-    ldr     x3, =ullPortTaskHasFPUContext
-    str     x2, [x3]
-
-    cbz     x2, 1f
-    /* Restore FPU registers */
-    mov     x0, x1
-    restorefloatregisters
-    mov     x1, x0
-1:
-    /* Restore critical nesting count */
-    ldr     x2, [x1], #8
-    ldr     x3, =ullCriticalNesting
-    str     x2, [x3]
-
-    /* Restore ELR and SPSR */
-    ldp     x3, x2, [x1], #16
-    msr     elr_el1, x3
-    msr     spsr_el1, x2
-
-    /* Restore GP registers */
-    restoreallgpregisters
-
-    /* Restore SP */
-    ldr     x0, [sp]
+    ldr     x0, [x1]
     mov     sp, x0
 
-    /* Ensure memory ordering */
+    /* Restore critical nesting and FPU indicator. */
+    ldp     x2, x3, [sp], #0x10
+
+    /* Program PMR according to the restored critical nesting depth. */
+    mov     x1, #255
+    cmp     x3, #0
+    b.eq    1f
+    ldr     x6, =ullMaxAPIPriorityMask
+    ldr     x1, [x6]
+1:
+    msr     ICC_PMR_EL1, x1
     dsb     sy
     isb     sy
 
+    ldr     x0, =ullCriticalNesting
+    str     x3, [x0]
+    ldr     x0, =ullPortTaskHasFPUContext
+    str     x2, [x0]
+
+    cbz     x2, 2f
+    ldp     q30, q31, [sp], #0x20
+    ldp     q28, q29, [sp], #0x20
+    ldp     q26, q27, [sp], #0x20
+    ldp     q24, q25, [sp], #0x20
+    ldp     q22, q23, [sp], #0x20
+    ldp     q20, q21, [sp], #0x20
+    ldp     q18, q19, [sp], #0x20
+    ldp     q16, q17, [sp], #0x20
+    ldp     q14, q15, [sp], #0x20
+    ldp     q12, q13, [sp], #0x20
+    ldp     q10, q11, [sp], #0x20
+    ldp     q8, q9, [sp], #0x20
+    ldp     q6, q7, [sp], #0x20
+    ldp     q4, q5, [sp], #0x20
+    ldp     q2, q3, [sp], #0x20
+    ldp     q0, q1, [sp], #0x20
+2:
+    /* Restore exception state. */
+    ldp     x2, x3, [sp], #0x10
+    msr     ELR_EL1, x2
+    msr     SPSR_EL1, x3
+
+    /* Restore general-purpose registers. */
+    ldp     x30, xzr, [sp], #0x10
+    ldp     x28, x29, [sp], #0x10
+    ldp     x26, x27, [sp], #0x10
+    ldp     x24, x25, [sp], #0x10
+    ldp     x22, x23, [sp], #0x10
+    ldp     x20, x21, [sp], #0x10
+    ldp     x18, x19, [sp], #0x10
+    ldp     x16, x17, [sp], #0x10
+    ldp     x14, x15, [sp], #0x10
+    ldp     x12, x13, [sp], #0x10
+    ldp     x10, x11, [sp], #0x10
+    ldp     x8, x9, [sp], #0x10
+    ldp     x6, x7, [sp], #0x10
+    ldp     x4, x5, [sp], #0x10
+    ldp     x2, x3, [sp], #0x10
+    ldp     x0, x1, [sp], #0x10
+
+    msr     SPSEL, #1
     eret
 .endm
 
 /*-----------------------------------------------------------*/
 
 /*
- * vPortYield - yield the current task.
+ * FreeRTOS_SWI_Handler - handles synchronous yields triggered by SVC.
+ * Tasks execute in EL1t using SP_EL0, so a software interrupt is required
+ * to enter exception context before SPSR_EL1/ELR_EL1 can be saved.
+ */
+.global FreeRTOS_SWI_Handler
+FreeRTOS_SWI_Handler:
+    portSAVE_CONTEXT
+
+    mrs     x0, ESR_EL1
+    lsr     x1, x0, #26
+    cmp     x1, #0x15              /* EC = SVC64 */
+    b.ne    .
+
+    bl      vTaskSwitchContext
+    portRESTORE_CONTEXT
+
+/*-----------------------------------------------------------*/
+
+/*
+ * vPortYield - raise an SVC to request a context switch.
  */
 .global vPortYield
 vPortYield:
-    portSAVE_CONTEXT
-    bl      vTaskSwitchContext
-    portRESTORE_CONTEXT
+    svc     #0
+    ret
 
 /*-----------------------------------------------------------*/
 
@@ -248,12 +336,14 @@ FreeRTOS_IRQ_Handler:
     ldr     x1, =ullICCIARValue
     str     x0, [x1]
 
-    /* Acknowledge the interrupt with GIC */
-    msr     ICC_EOIR1_EL1, x0
-    isb
-
     /* Call the application IRQ handler with the IRQ ID */
     bl      vApplicationIRQHandler
+
+    /* Acknowledge the interrupt with GIC after servicing the source */
+    ldr     x1, =ullICCIARValue
+    ldr     x0, [x1]
+    msr     ICC_EOIR1_EL1, x0
+    isb
 
     /* Decrement nesting count */
     ldr     x0, =ullPortInterruptNesting

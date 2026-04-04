@@ -7,7 +7,7 @@
 
 #include "arch_api.h"
 #include "bench_api.h"
-#include "orange_pi_5.h"
+#include "board_config.h"
 
 #define NSEC_PER_SEC 1000000000ULL
 

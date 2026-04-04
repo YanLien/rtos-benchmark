@@ -6,10 +6,18 @@
  */
 
 #include "bench_api.h"
-#include "orange_pi_5.h"
+#include "board_config.h"
 #include "gicv3.h"
 
-static bench_isr_handler_t timer_isr_handler;
+extern void FreeRTOS_Tick_Handler(void);
+
+static void freertos_tick_isr(void *arg)
+{
+	(void)arg;
+	FreeRTOS_Tick_Handler();
+}
+
+static bench_isr_handler_t timer_isr_handler = freertos_tick_isr;
 
 static inline uint64_t read_cntpct_el0(void)
 {
@@ -61,8 +69,7 @@ void bench_timer_isr_set(bench_isr_handler_t handler)
 bench_time_t bench_timer_cycles_diff(bench_time_t trigger_point,
 				     bench_time_t sample_point)
 {
-	/* Counter counts up, so trigger > sample */
-	return (trigger_point - sample_point + 1);
+	return (sample_point - trigger_point);
 }
 
 bench_time_t bench_timer_cycles_get(void)
@@ -74,6 +81,7 @@ bench_time_t bench_timer_isr_expiry_set(uint32_t usec)
 {
 	uint64_t cycles_per_usec = (TIMER_FREQ + 999999) / 1000000;
 	uint64_t cycles = cycles_per_usec * usec;
+	uint64_t trigger = read_cntpct_el0() + cycles;
 
 	/* Disable timer */
 	write_cntp_ctl_el0(0);
@@ -84,13 +92,13 @@ bench_time_t bench_timer_isr_expiry_set(uint32_t usec)
 	/* Enable timer with IRQ unmasked */
 	write_cntp_ctl_el0(0x1);
 
-	return (bench_time_t)cycles;
+	return (bench_time_t)trigger;
 }
 
 void bench_timer_isr_restore(bench_isr_handler_t handler)
 {
 	/* Restore the original tick handler and re-arm for normal tick */
-	timer_isr_handler = handler;
+	timer_isr_handler = (handler != NULL) ? handler : freertos_tick_isr;
 
 	/* Re-arm timer for normal FreeRTOS tick period */
 	uint64_t tval = bench_timer_cycles_per_tick();

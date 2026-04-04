@@ -14,6 +14,13 @@ extern void bench_message_queue_init(void *arg);
 
 void bench_all(void *arg)
 {
+	/* Raw UART output to test if task started (bypasses PRINTF) */
+#ifdef BOARD_QEMU_VIRT
+	volatile uint32_t *uart_dr = (volatile uint32_t *)0x09000000;
+	*uart_dr = '!'; *uart_dr = 'T'; *uart_dr = 'A'; *uart_dr = 'S'; *uart_dr = 'K';
+	*uart_dr = '!'; *uart_dr = '\r'; *uart_dr = '\n';
+#endif
+
 	PRINTF("\n\r *** Starting! ***\n\n\r");
 
 	bench_basic_thread_ops(arg);

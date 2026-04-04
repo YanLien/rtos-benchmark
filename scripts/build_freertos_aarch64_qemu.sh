@@ -1,21 +1,23 @@
 #!/bin/bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# Build FreeRTOS rtos-benchmark for RK3588 (Orange Pi 5, Cortex-A76)
+# Build FreeRTOS rtos-benchmark for QEMU virt (Cortex-A55)
 #
 # Usage:
-#   bash scripts/build_freertos_aarch64.sh [OPTIONS]
+#   bash scripts/build_freertos_aarch64_qemu.sh [OPTIONS]
 #
 # Options:
 #   -k, --kernel PATH    FreeRTOS-Kernel source path
-#   -o, --output PATH    Build output directory (default: build/rk3588)
-#   -j, --jobs N         Parallel build jobs (default: 1, sequential)
+#   -o, --output PATH    Build output directory (default: build/qemu_virt)
+#   -r, --run            Run in QEMU after successful build
 #   -c, --clean          Clean before build
 #   -h, --help           Show this help
 #
 # Environment variables:
 #   CROSS_COMPILE        Cross compiler prefix (default: aarch64-linux-gnu-)
 #   FREERTOS_KERNEL_PATH FreeRTOS-Kernel source path (overridden by -k)
+#   ITERATIONS           Benchmark iterations (default: 100 for QEMU)
+#   CALIBRATION_LOOPS    Calibration loops (default: 1000 for QEMU)
 
 set -e
 
@@ -23,18 +25,22 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJ="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CROSS_COMPILE="${CROSS_COMPILE:-aarch64-linux-gnu-}"
+ITERATIONS="${ITERATIONS:-100}"
+CALIBRATION_LOOPS="${CALIBRATION_LOOPS:-1000}"
 CC="${CROSS_COMPILE}gcc"
 OBJCOPY="${CROSS_COMPILE}objcopy"
 SIZE="${CROSS_COMPILE}size"
-BD="${PROJ}/build/rk3588"
+BD="${PROJ}/build/qemu_virt"
 KERNEL=""
 CLEAN=0
+RUN=0
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case $1 in
         -k|--kernel)   KERNEL="$2"; shift 2 ;;
         -o|--output)   BD="$2"; shift 2 ;;
+        -r|--run)      RUN=1; shift ;;
         -c|--clean)    CLEAN=1; shift ;;
         -h|--help)
             sed -n '2,15p' "$0" | sed 's/^# \?//'
@@ -48,8 +54,8 @@ if [ -z "$KERNEL" ]; then
     KERNEL="${FREERTOS_KERNEL_PATH:-}"
 fi
 if [ -z "$KERNEL" ]; then
-    # Try common relative locations
     for candidate in \
+        "${PROJ}/FreeRTOS-Kernel" \
         "${PROJ}/../FreeRTOS-Kernel" \
         "${PROJ}/../../FreeRTOS-Kernel" \
         "${PROJ}/../../../FreeRTOS-Kernel"; do
@@ -85,9 +91,9 @@ CF="-mcpu=cortex-a55 -mgeneral-regs-only -ffreestanding -nostdlib"
 CF="$CF -Wall -Wno-unused-parameter -Wno-unused-variable"
 CF="$CF -include stdbool.h"
 CF="$CF -DFREERTOS_AARCH64"
-CF="$CF -DBOARD_ORANGE_PI_5"
-CF="$CF -DSYS_CLOCK_HW_CYCLES_PER_SEC=1800000000"
-CF="$CF -DITERATIONS=10000 -DCALIBRATION_LOOPS=10000"
+CF="$CF -DBOARD_QEMU_VIRT"
+CF="$CF -DSYS_CLOCK_HW_CYCLES_PER_SEC=62500000"
+CF="$CF -DITERATIONS=${ITERATIONS} -DCALIBRATION_LOOPS=${CALIBRATION_LOOPS}"
 CF="$CF -I${PROJ}/h"
 CF="$CF -I${SRC}"
 CF="$CF -I${SRC}/board"
@@ -124,10 +130,12 @@ COMPILE_S() {
 ERRORS=0
 
 # ── Compile ───────────────────────────────────────────────────────────────────
-echo "=== Building FreeRTOS rtos-benchmark for RK3588 ==="
+echo "=== Building FreeRTOS rtos-benchmark for QEMU virt (Cortex-A55) ==="
 echo "  CC:      $CC"
 echo "  Kernel:  $KERNEL"
 echo "  Output:  $BD"
+echo "  Iter:    $ITERATIONS"
+echo "  Calib:   $CALIBRATION_LOOPS"
 echo ""
 
 echo "--- Startup & FreeRTOS port ---"
@@ -135,8 +143,8 @@ COMPILE_S "${SRC}/startup_aarch64.S"              "${BD}/startup.o"            |
 COMPILE_S "${SRC}/port/portASM.S"                  "${BD}/portASM.o"            || ERRORS=$((ERRORS+1))
 COMPILE_C "${SRC}/port/port.c"                     "${BD}/port.o"               || ERRORS=$((ERRORS+1))
 
-echo "--- Board drivers ---"
-COMPILE_C "${SRC}/board/uart_16550.c"              "${BD}/uart_16550.o"         || ERRORS=$((ERRORS+1))
+echo "--- Board drivers (PL011 + GICv3) ---"
+COMPILE_C "${SRC}/board/pl011_uart.c"              "${BD}/pl011_uart.o"         || ERRORS=$((ERRORS+1))
 COMPILE_C "${SRC}/board/gicv3.c"                   "${BD}/gicv3.o"              || ERRORS=$((ERRORS+1))
 COMPILE_C "${SRC}/board/rk3588_timer.c"            "${BD}/rk3588_timer.o"       || ERRORS=$((ERRORS+1))
 
@@ -180,11 +188,11 @@ echo ""
 echo "--- Linking ---"
 
 if ! $CC -nostdlib -Wl,--no-warn-rwx-segments \
-    -T "${SRC}/rk3588_aarch64.ld" \
+    -T "${SRC}/qemu_virt_aarch64.ld" \
     "${BD}/startup.o" \
     "${BD}/portASM.o" \
     "${BD}/port.o" \
-    "${BD}/uart_16550.o" \
+    "${BD}/pl011_uart.o" \
     "${BD}/gicv3.o" \
     "${BD}/rk3588_timer.o" \
     "${BD}/arch_util.o" \
@@ -208,15 +216,15 @@ if ! $CC -nostdlib -Wl,--no-warn-rwx-segments \
     "${BD}/bench_thread_switch_yield_test.o" \
     "${BD}/bench_interrupt_latency_test.o" \
     -lgcc \
-    -o "${BD}/freertos_aarch64.elf" \
-    -Wl,-Map="${BD}/freertos_aarch64.map" 2>&1; then
+    -o "${BD}/freertos_aarch64_qemu.elf" \
+    -Wl,-Map="${BD}/freertos_aarch64_qemu.map" 2>&1; then
     echo ""
     echo "=== LINK FAILED ==="
     exit 1
 fi
 
 # ── Generate binary ───────────────────────────────────────────────────────────
-$OBJCOPY -O binary "${BD}/freertos_aarch64.elf" "${BD}/freertos_aarch64.bin"
+$OBJCOPY -O binary "${BD}/freertos_aarch64_qemu.elf" "${BD}/freertos_aarch64_qemu.bin"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
@@ -224,9 +232,27 @@ echo "========================================="
 echo "  BUILD SUCCESSFUL"
 echo "========================================="
 echo ""
-$SIZE "${BD}/freertos_aarch64.elf"
+$SIZE "${BD}/freertos_aarch64_qemu.elf"
 echo ""
-BIN_SIZE=$(stat --printf='%s' "${BD}/freertos_aarch64.bin")
-echo "  ELF:  ${BD}/freertos_aarch64.elf"
-echo "  BIN:  ${BD}/freertos_aarch64.bin (${BIN_SIZE} bytes)"
-echo "  MAP:  ${BD}/freertos_aarch64.map"
+BIN_SIZE=$(stat --printf='%s' "${BD}/freertos_aarch64_qemu.bin")
+echo "  ELF:  ${BD}/freertos_aarch64_qemu.elf"
+echo "  BIN:  ${BD}/freertos_aarch64_qemu.bin (${BIN_SIZE} bytes)"
+echo "  MAP:  ${BD}/freertos_aarch64_qemu.map"
+echo ""
+echo "Run with:"
+echo "  qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a55 -smp 1 -m 256 -nographic -kernel ${BD}/freertos_aarch64_qemu.elf"
+
+# ── Optionally run in QEMU ────────────────────────────────────────────────────
+if [ "$RUN" -eq 1 ]; then
+    echo ""
+    echo "=== Running in QEMU ==="
+    echo "  (Press Ctrl-A X to exit)"
+    echo ""
+    qemu-system-aarch64 \
+        -M virt,gic-version=3 \
+        -cpu cortex-a55 \
+        -smp 1 \
+        -m 256 \
+        -nographic \
+        -kernel "${BD}/freertos_aarch64_qemu.elf" || true
+fi

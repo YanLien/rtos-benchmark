@@ -8,7 +8,11 @@
 typedef uint64_t bench_time_t;
 typedef void * bench_work;
 
+#ifdef BOARD_QEMU_VIRT
+#include "pl011_uart.h"
+#else
 #include "uart_16550.h"
+#endif
 
 #define PRINTF(fmt, ...) uart_printf(fmt, ##__VA_ARGS__)
 

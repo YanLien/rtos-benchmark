@@ -1,36 +1,37 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-#ifndef ORANGE_PI_5_H_
-#define ORANGE_PI_5_H_
+#ifndef QEMU_VIRT_H_
+#define QEMU_VIRT_H_
 
 /*
- * RK3588 hardware address definitions for Orange Pi 5
- * RK3588: 4x Cortex-A76 + 4x Cortex-A55, ARMv8.2-A
- * Targeting Cortex-A55 (LITTLE cluster, CPU0-3)
+ * QEMU 'virt' machine hardware address definitions for AArch64.
+ * qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a55
  */
 
-/* UART2 - Orange Pi 5 debug console */
-#define UART2_BASE              0xFEB50000UL
-#define UART_CONSOLE_BASE       UART2_BASE
-#define UART_CONSOLE_BAUD       1500000UL
-#define UART_CONSOLE_CLK        24000000UL
+/* PL011 UART0 - QEMU virt console */
+#define UART_CONSOLE_BASE      0x09000000UL
+#define UART_CONSOLE_BAUD      115200UL
+#define UART_CONSOLE_CLK       24000000UL
 
-/* GIC-600 (GICv3) */
-#define GICD_BASE               0xFD000000UL   /* Distributor */
-#define GICR_BASE               0xFD100000UL   /* Redistributor (PPI 0-31) */
+/* Alias for code that uses UART2_BASE */
+#define UART2_BASE             UART_CONSOLE_BASE
 
-/* ARM Generic Timer */
-#define TIMER_FREQ              24000000UL     /* 24 MHz counter frequency */
+/* GICv3 (QEMU virt) */
+#define GICD_BASE              0x08000000UL   /* Distributor */
+#define GICR_BASE              0x080A0000UL   /* Redistributor (PPI 0-31) */
 
-/* CPU clock - Cortex-A55 on RK3588 */
+/* ARM Generic Timer - QEMU sets CNTFRQ_EL0 to 62.5 MHz */
+#define TIMER_FREQ             62500000UL     /* 62.5 MHz counter frequency */
+
+/* CPU clock - Cortex-A55 in QEMU (matches CNTFRQ_EL0) */
 #ifndef SYS_CLOCK_HW_CYCLES_PER_SEC
-#define SYS_CLOCK_HW_CYCLES_PER_SEC  1800000000UL
+#define SYS_CLOCK_HW_CYCLES_PER_SEC  62500000UL
 #endif
 
-/* EL1 Physical Timer IRQ (GIC SPI ID = 30 + 32 = 62 in GICv3) */
-#define TIMER_EL1_IRQ           30
+/* EL1 Physical Timer IRQ (PPI 30 - same on all GICv3 platforms) */
+#define TIMER_EL1_IRQ          30
 
-/* GIC Distributor register offsets */
+/* GIC Distributor register offsets (GICv3 architecture-defined) */
 #define GICD_CTLR               0x0000
 #define GICD_TYPER              0x0004
 #define GICD_ISENABLER(n)       (0x0100 + ((n) / 32) * 4)
@@ -54,4 +55,4 @@
 #define GICR_ICPENDR0           (GICR_SGI_BASE + 0x0280)
 #define GICR_IPRIORITYR(n)      (GICR_SGI_BASE + 0x0400 + (n))
 
-#endif /* ORANGE_PI_5_H_ */
+#endif /* QEMU_VIRT_H_ */

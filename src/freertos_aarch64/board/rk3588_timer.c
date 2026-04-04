@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-#include "orange_pi_5.h"
+#include "board_config.h"
 #include "gicv3.h"
 
 /*

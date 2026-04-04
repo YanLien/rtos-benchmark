@@ -8,7 +8,7 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
-#include "orange_pi_5.h"
+#include "board_config.h"
 
 /*-----------------------------------------------------------
  * Application specific definitions
@@ -109,8 +109,8 @@ extern void vClearTickInterrupt(void);
 /* No MPU */
 #define configENABLE_MPU                        0
 
-/* FPU support: 1 = lazy, 2 = eager */
-#define configUSE_TASK_FPU_SUPPORT              2
+/* Benchmark code does not use FP/SIMD registers on QEMU or RK3588 EL1 bring-up. */
+#define configUSE_TASK_FPU_SUPPORT              1
 
 /* Single core for now */
 #ifndef configNUMBER_OF_CORES

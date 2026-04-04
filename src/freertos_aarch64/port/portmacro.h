@@ -96,13 +96,15 @@ extern void vPortClearInterruptMask(UBaseType_t uxNewMaskValue);
 #endif
 
 /* Yield */
+extern uint64_t ullPortYieldRequired;
 extern void vPortYield(void);
-#define portYIELD()                 vPortYield()
-#define portYIELD_WITHIN_API()      vPortYield()
+#define portYIELD()                 __asm__ volatile ( "svc #0" ::: "memory" )
+#define portYIELD_WITHIN_API()      portYIELD()
+#define portEND_SWITCHING_ISR(x)    do { if ((x) != pdFALSE) { ullPortYieldRequired = pdTRUE; } } while (0)
 
 /* Scheduler utilities */
 extern void vPortRestoreTaskContext(void);
-#define portYIELD_FROM_ISR(x)       do { if (x) portYIELD(); } while(0)
+#define portYIELD_FROM_ISR(x)       portEND_SWITCHING_ISR(x)
 
 /* Tick type properties */
 #define portTICK_TYPE_IS_ATOMIC     0

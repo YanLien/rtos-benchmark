@@ -107,7 +107,7 @@ StackType_t * pxPortInitialiseStack(StackType_t * pxTopOfStack,
 				    TaskFunction_t pxCode,
 				    void * pvParameters)
 {
-	/* Setup the initial stack of the task. */
+	/* Setup the initial stack of the task as expected by portRESTORE_CONTEXT. */
 	pxTopOfStack--;
 	*pxTopOfStack = 0x0101010101010101ULL; /* X1 */
 	pxTopOfStack--;
@@ -177,11 +177,25 @@ StackType_t * pxPortInitialiseStack(StackType_t * pxTopOfStack,
 	pxTopOfStack--;
 	*pxTopOfStack = (StackType_t) pxCode;  /* ELR (entry point) */
 
-	/* No FPU context initially */
+#if ( configUSE_TASK_FPU_SUPPORT == 1 )
+	/* The task starts with interrupts enabled and no FPU context. */
 	pxTopOfStack--;
 	*pxTopOfStack = portNO_CRITICAL_NESTING;
 	pxTopOfStack--;
 	*pxTopOfStack = portNO_FLOATING_POINT_CONTEXT;
+#elif ( configUSE_TASK_FPU_SUPPORT == 2 )
+	/* Reserve and clear space for 32 128-bit Q registers. */
+	pxTopOfStack -= portFPU_REGISTER_WORDS;
+	memset(pxTopOfStack, 0x00, portFPU_REGISTER_WORDS * sizeof(StackType_t));
+
+	pxTopOfStack--;
+	*pxTopOfStack = portNO_CRITICAL_NESTING;
+	pxTopOfStack--;
+	*pxTopOfStack = pdTRUE;
+	ullPortTaskHasFPUContext = pdTRUE;
+#else
+	#error "Invalid configUSE_TASK_FPU_SUPPORT setting."
+#endif
 
 	return pxTopOfStack;
 }

@@ -20,6 +20,7 @@
 .global _vector_table
 
 .extern FreeRTOS_IRQ_Handler
+.extern FreeRTOS_SWI_Handler
 
 /*
  * Exception vector table for EL1.
@@ -27,18 +28,18 @@
  */
 .align 11
 _vector_table:
-    /* Current EL with SP0 - not used */
-    b   hang                       /* +0x000 Synchronous */
+    /* Current EL with SP0 - tasks run in EL1t, so yield/IRQ arrive here */
+    b   FreeRTOS_SWI_Handler       /* +0x000 Synchronous */
     .align 7
-    b   hang                       /* +0x080 IRQ */
+    b   FreeRTOS_IRQ_Handler       /* +0x080 IRQ */
     .align 7
     b   hang                       /* +0x100 FIQ */
     .align 7
     b   hang                       /* +0x180 SError */
     .align 7
 
-    /* Current EL with SPx - this is where FreeRTOS IRQs arrive */
-    b   hang                       /* +0x200 Synchronous */
+    /* Current EL with SPx - keep these routed too for debug/bring-up */
+    b   FreeRTOS_SWI_Handler       /* +0x200 Synchronous */
     .align 7
     b   FreeRTOS_IRQ_Handler       /* +0x280 IRQ */
     .align 7

@@ -11,7 +11,7 @@
 #include "semphr.h"
 
 /* Board drivers */
-#include "orange_pi_5.h"
+#include "board_config.h"
 #include "uart_16550.h"
 #include "gicv3.h"
 
@@ -72,10 +72,11 @@ void vClearTickInterrupt(void)
  */
 void vApplicationIRQHandler(uint32_t intid)
 {
-	extern void FreeRTOS_Tick_Handler(void);
-
 	if (intid == TIMER_EL1_IRQ) {
-		FreeRTOS_Tick_Handler();
+		bench_isr_handler_t handler = bench_timer_isr_get();
+
+		if (handler != NULL)
+			handler(NULL);
 	}
 }
 
@@ -84,18 +85,31 @@ void bench_test_init(void (*test_init_function)(void *))
 	TaskHandle_t handle;
 
 	/* Initialize UART for debug output */
-	uart_init(UART2_BASE, 1500000, 24000000);
+	uart_init(UART2_BASE, UART_CONSOLE_BAUD, UART_CONSOLE_CLK);
 
+#ifdef BOARD_QEMU_VIRT
+	PRINTF("FreeRTOS benchmark on QEMU virt (Cortex-A55)\r\n");
+#else
 	PRINTF("FreeRTOS benchmark on RK3588 (Cortex-A55)\r\n");
+#endif
 
+	PRINTF("[DEBUG] Initializing GIC...\r\n");
 	/* Initialize GIC */
 	gicv3_init();
+	PRINTF("[DEBUG] GIC initialized.\r\n");
 
+	PRINTF("[DEBUG] Initializing timer...\r\n");
 	/* Initialize Generic Timer */
 	extern void rk3588_timer_init(void);
 	rk3588_timer_init();
 
-	to_remove_sem = xSemaphoreCreateCountingStatic(1, 0,
+	/* Debug: read CNTFRQ_EL0 */
+	uint64_t cntfrq;
+	__asm__ volatile ("mrs %0, cntfrq_el0" : "=r" (cntfrq));
+	PRINTF("[DEBUG] CNTFRQ_EL0 = %u\r\n", (uint32_t)cntfrq);
+	PRINTF("[DEBUG] Timer initialized.\r\n");
+
+	to_remove_sem = xSemaphoreCreateCountingStatic(MAX_THREADS, 0,
 						       &to_remove_sem_buf);
 
 	handle = xTaskCreateStatic(test_init_function, "benchmark", STACK_SIZE,
@@ -276,12 +290,14 @@ void bench_sync_ticks(void)
 void bench_thread_exit(void)
 {
 	threads_to_remove[threads_to_remove_idx++] = xTaskGetCurrentTaskHandle();
-	xSemaphoreTake(to_remove_sem, portMAX_DELAY);
+	xSemaphoreGive(to_remove_sem);
+	vTaskSuspend(NULL);
 }
 
 void bench_collect_resources(void)
 {
 	while (threads_to_remove_idx) {
+		xSemaphoreTake(to_remove_sem, portMAX_DELAY);
 		vTaskDelete(threads_to_remove[--threads_to_remove_idx]);
 	}
 }
