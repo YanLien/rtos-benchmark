@@ -1,14 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 /*
- * FreeRTOS configuration for RK3588 (AArch64, Cortex-A76).
+ * FreeRTOS configuration for QEMU virt (AArch64, Cortex-A55).
  * Based on FreeRTOS-Kernel portable/GCC/ARM_AARCH64 requirements.
  */
 
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
-#include "board_config.h"
+#include "qemu_virt.h"
 
 /*-----------------------------------------------------------
  * Application specific definitions
@@ -112,15 +112,19 @@ extern void vClearTickInterrupt(void);
 /* Benchmark code does not use FP/SIMD registers on QEMU or RK3588 EL1 bring-up. */
 #define configUSE_TASK_FPU_SUPPORT              1
 
-/* Single core for now */
+/* SMP 4-core configuration */
 #ifndef configNUMBER_OF_CORES
-#define configNUMBER_OF_CORES                   1
+#define configNUMBER_OF_CORES                   4
 #endif
+#define configRUN_MULTIPLE_PRIORITIES           1
+#define configUSE_TASK_PREEMPTION_DISABLE       0
+#define configUSE_CORE_AFFINITY                 0
+#define configUSE_PASSIVE_IDLE_HOOK             1
 
 /* EL1 bare metal */
 #define configRUN_IN_EL1                        1
 
-/* Port optimised task selection */
-#define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
+/* Port optimised task selection - must be 0 for SMP */
+#define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 
 #endif /* FREERTOS_CONFIG_H */

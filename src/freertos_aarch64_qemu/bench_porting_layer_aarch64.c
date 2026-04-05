@@ -11,13 +11,14 @@
 #include "semphr.h"
 
 /* Board drivers */
-#include "board_config.h"
-#include "uart_16550.h"
+#include "qemu_virt.h"
+#include "pl011_uart.h"
 #include "gicv3.h"
 
 #include "arch_api.h"
 
 #include <assert.h>
+#include <string.h>
 
 #define MAX_SEMAPHORES 5
 #define MAX_THREADS 10
@@ -25,6 +26,39 @@
 #define MAX_MUTEXES 5
 #define MAX_QUEUES 1
 #define QUEUE_SIZE (1)
+
+/*-----------------------------------------------------------
+ * PSCI support for SMP core boot
+ *----------------------------------------------------------*/
+
+/* PSCI function IDs (ARM DEN 0022E) */
+#define PSCI_CPU_ON_64       0xC4000003
+#define PSCI_SUCCESS         0
+#define PSCI_ALREADY_ON      3
+
+/* Secondary core entry (defined in startup_aarch64.S) */
+extern void SecondaryEntry(void);
+
+/* PSCI conduit: HVC for QEMU virt at EL1 */
+static inline int psci_cpu_on(uint64_t target_cpu, uint64_t entry_point, uint64_t context_id)
+{
+	register uint64_t x0 __asm__("x0") = PSCI_CPU_ON_64;
+	register uint64_t x1 __asm__("x1") = target_cpu;
+	register uint64_t x2 __asm__("x2") = entry_point;
+	register uint64_t x3 __asm__("x3") = context_id;
+
+	__asm__ volatile (
+		"hvc #0"
+		: "+r" (x0)
+		: "r" (x1), "r" (x2), "r" (x3)
+		: "memory"
+	);
+
+	return (int)x0;
+}
+
+/* Declaration from port.c */
+extern volatile uint8_t ucSecondaryCoresReadyFlags;
 
 static SemaphoreHandle_t semaphores[MAX_SEMAPHORES];
 static StaticSemaphore_t semaphore_buffer[MAX_SEMAPHORES];
@@ -87,11 +121,7 @@ void bench_test_init(void (*test_init_function)(void *))
 	/* Initialize UART for debug output */
 	uart_init(UART2_BASE, UART_CONSOLE_BAUD, UART_CONSOLE_CLK);
 
-#ifdef BOARD_QEMU_VIRT
-	PRINTF("FreeRTOS benchmark on QEMU virt (Cortex-A55)\r\n");
-#else
-	PRINTF("FreeRTOS benchmark on RK3588 (Cortex-A55)\r\n");
-#endif
+	PRINTF("FreeRTOS benchmark on QEMU virt (Cortex-A55) SMP\r\n");
 
 	PRINTF("[DEBUG] Initializing GIC...\r\n");
 	/* Initialize GIC */
@@ -108,6 +138,29 @@ void bench_test_init(void (*test_init_function)(void *))
 	__asm__ volatile ("mrs %0, cntfrq_el0" : "=r" (cntfrq));
 	PRINTF("[DEBUG] CNTFRQ_EL0 = %u\r\n", (uint32_t)cntfrq);
 	PRINTF("[DEBUG] Timer initialized.\r\n");
+
+#if ( configNUMBER_OF_CORES > 1 )
+	/* Reset secondary core ready flags */
+	ucSecondaryCoresReadyFlags = 0;
+
+	/* Boot secondary cores via PSCI */
+	for (int i = 1; i < configNUMBER_OF_CORES; i++) {
+		PRINTF("[DEBUG] Booting core %d...\r\n", i);
+		int ret = psci_cpu_on((uint64_t)i, (uint64_t)SecondaryEntry, 0);
+		if (ret != PSCI_SUCCESS && ret != PSCI_ALREADY_ON) {
+			PRINTF("[ERROR] PSCI CPU_ON core %d failed: %d\r\n", i, ret);
+		}
+	}
+
+	/* Wait for all secondary cores to signal ready.
+	 * Secondary cores set bits 1..N-1 (not bit 0).
+	 * Expected: cores 1,2,3 → bits 1,2,3 set → 0xE */
+	uint8_t all_ready = ((1U << configNUMBER_OF_CORES) - 1) & ~1U;
+	while (ucSecondaryCoresReadyFlags != all_ready) {
+		__asm__ volatile ("wfe" ::: "memory");
+	}
+	PRINTF("[DEBUG] All %d cores ready.\r\n", configNUMBER_OF_CORES);
+#endif
 
 	to_remove_sem = xSemaphoreCreateCountingStatic(MAX_THREADS, 0,
 						       &to_remove_sem_buf);
@@ -375,6 +428,23 @@ void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
 	*pulIdleTaskStackSize = STACK_SIZE;
 }
 
+#if ( configNUMBER_OF_CORES > 1 )
+static StaticTask_t xPassiveIdleTaskTCBs[ configNUMBER_OF_CORES - 1 ];
+static StackType_t uxPassiveIdleStacks[ configNUMBER_OF_CORES - 1 ][ STACK_SIZE ];
+
+void vApplicationGetPassiveIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
+					  StackType_t **ppxIdleTaskStackBuffer,
+					  configSTACK_DEPTH_TYPE *pulIdleTaskStackSize,
+					  BaseType_t xCoreID)
+{
+	/* Kernel passes xCoreID - 1 (0-indexed passive idle: 0, 1, 2) */
+	configASSERT(xCoreID >= 0 && xCoreID < (configNUMBER_OF_CORES - 1));
+	*ppxIdleTaskTCBBuffer = &xPassiveIdleTaskTCBs[xCoreID];
+	*ppxIdleTaskStackBuffer = uxPassiveIdleStacks[xCoreID];
+	*pulIdleTaskStackSize = STACK_SIZE;
+}
+#endif
+
 static StaticTask_t xTimerTaskTCBBuffer;
 static StackType_t xTimerStack[STACK_SIZE];
 
@@ -385,4 +455,14 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
 	*ppxTimerTaskTCBBuffer = &xTimerTaskTCBBuffer;
 	*ppxTimerTaskStackBuffer = xTimerStack;
 	*pulTimerTaskStackSize = STACK_SIZE;
+}
+
+/*
+ * Passive idle hook - required for SMP (configUSE_PASSIVE_IDLE_HOOK=1).
+ * Called by each core's idle task when there is nothing to do.
+ */
+void vApplicationPassiveIdleHook(void)
+{
+	/* Wait for interrupt - low power idle */
+	__asm__ volatile ("wfi" ::: "memory");
 }

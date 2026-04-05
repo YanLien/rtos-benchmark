@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-#include "board_config.h"
+#include "qemu_virt.h"
 #include "gicv3.h"
 
 /*
- * ARM Generic Timer driver for RK3588.
+ * ARM Generic Timer driver for QEMU virt.
  * Uses EL1 Physical Timer (CNTP_TVAL_EL0 / CNTP_CTL_EL0) for tick generation.
- * The counter frequency is typically 24 MHz (set by firmware via CNTFRQ_EL0).
+ * The counter frequency is 62.5 MHz (set by QEMU via CNTFRQ_EL0).
  */
 
 static inline uint64_t read_cntpct_el0(void)

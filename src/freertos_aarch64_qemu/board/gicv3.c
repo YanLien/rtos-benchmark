@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 #include "gicv3.h"
-#include "board_config.h"
+#include "qemu_virt.h"
 
 #include <stdint.h>
 #include <stddef.h>
@@ -111,13 +111,6 @@ void gicv3_init(void)
 	write_icc_sre_el1(0x7);
 	isb();
 
-	/*
-	 * If running at EL3, also enable SRE at EL3 and allow lower ELs.
-	 * For bare-metal AMP on RK3588, u-boot typically runs at EL2/EL3
-	 * and the secondary core enters at EL1. We assume SRE is already
-	 * enabled by firmware.
-	 */
-
 	/* Disable Distributor before configuration */
 	write32(gicd + GICD_CTLR, 0x0);
 	dsb();
@@ -159,6 +152,63 @@ void gicv3_init(void)
 	/* Enable Distributor (Group 1) */
 	write32(gicd + GICD_CTLR, 0x2);
 	dsb();
+
+	/* Enable SGI 0 for inter-core IPI (yield) at lowest usable priority */
+	*(volatile uint8_t *)(gicr + GICR_IPRIORITYR(0)) = 0xFE; /* lowest priority */
+	write32(gicr + GICR_ISENABLER0, 1U << 0); /* enable SGI 0 */
+
+	/* Set PMR to allow all priorities */
+	write_icc_pmr_el1(0xFF);
+
+	/* Set binary point register */
+	write_icc_bpr0_el1(0x0);
+
+	/* Enable Group 1 interrupts at CPU interface */
+	write_icc_igrpen1_el1(0x1);
+	isb();
+}
+
+/*
+ * Per-core GICv3 initialization for secondary cores.
+ * The Distributor is already configured by the primary core.
+ * Each secondary core only needs to configure its own Redistributor
+ * and enable its CPU interface.
+ */
+void gicv3_init_secondary(void)
+{
+	uint64_t mpidr;
+	uint8_t core_id;
+	uintptr_t gicr;
+
+	__asm__ volatile ("mrs %0, MPIDR_EL1" : "=r" (mpidr));
+	core_id = (uint8_t)(mpidr & 0xff);
+
+	/* Calculate this core's Redistributor base address */
+	gicr = GICR_BASE + ((uintptr_t)core_id * GICR_STRIDE);
+
+	/* Enable system register interface */
+	write_icc_sre_el1(0x7);
+	isb();
+
+	/* Set all PPI (0-31) to Group 1 */
+	write32(gicr + GICR_IGROUPR0, 0xFFFFFFFF);
+	write32(gicr + GICR_IGROUPMODR0, 0x0);
+
+	/* PPI priorities */
+	uint32_t i;
+	for (i = 0; i < 32; i += 4) {
+		write32(gicr + GICR_IPRIORITYR(i), 0xA0A0A0A0);
+	}
+
+	/* Disable all PPIs/SGIs */
+	write32(gicr + GICR_ICENABLER0, 0xFFFFFFFF);
+
+	/* Wait for Redistributor */
+	gicr_wait_for_rwp(gicr);
+
+	/* Enable SGI 0 for inter-core IPI */
+	*(volatile uint8_t *)(gicr + GICR_IPRIORITYR(0)) = 0xFE;
+	write32(gicr + GICR_ISENABLER0, 1U << 0);
 
 	/* Set PMR to allow all priorities */
 	write_icc_pmr_el1(0xFF);

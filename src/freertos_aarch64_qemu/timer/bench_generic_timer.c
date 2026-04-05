@@ -2,11 +2,11 @@
 
 /*
  * Timer interrupt abstraction for benchmark interrupt latency tests.
- * Uses ARM Generic Timer EL1 Physical Timer on RK3588.
+ * Uses ARM Generic Timer EL1 Physical Timer on QEMU virt.
  */
 
 #include "bench_api.h"
-#include "board_config.h"
+#include "qemu_virt.h"
 #include "gicv3.h"
 
 extern void FreeRTOS_Tick_Handler(void);

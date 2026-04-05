@@ -17,9 +17,13 @@
 #ifdef FREERTOS
 #include "../freertos/bench_porting_layer_freertos.h"
 #endif /* FREERTOS */
-#ifdef FREERTOS_AARCH64
-#include "../freertos_aarch64/bench_porting_layer_aarch64.h"
-#endif /* FREERTOS_AARCH64 */
+#if defined(FREERTOS_AARCH64_QEMU)
+#include "../src/freertos_aarch64_qemu/bench_porting_layer_aarch64.h"
+#elif defined(FREERTOS_AARCH64_ORANGEPI)
+#include "../src/freertos_aarch64_orangepi/bench_porting_layer_aarch64.h"
+#elif defined(FREERTOS_AARCH64)
+#include "bench_porting_layer_aarch64.h"
+#endif
 #ifdef RTEMS
 #include "../src/rtems/bench_porting_layer_rtems.h"
 #endif /* RTEMS */

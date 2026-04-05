@@ -1,10 +1,6 @@
 add_subdirectory(arch)
 add_subdirectory(timer)
 
-if (BOARD_QEMU_VIRT)
-    target_sources(app PRIVATE board/pl011_uart.c)
-else()
-    target_sources(app PRIVATE board/uart_16550.c)
-endif()
+target_sources(app PRIVATE board/uart_16550.c)
 target_sources(app PRIVATE board/gicv3.c)
 target_sources(app PRIVATE board/rk3588_timer.c)

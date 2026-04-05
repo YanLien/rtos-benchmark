@@ -15,7 +15,7 @@ extern void bench_message_queue_init(void *arg);
 void bench_all(void *arg)
 {
 	/* Raw UART output to test if task started (bypasses PRINTF) */
-#ifdef BOARD_QEMU_VIRT
+#ifdef FREERTOS_AARCH64_QEMU
 	volatile uint32_t *uart_dr = (volatile uint32_t *)0x09000000;
 	*uart_dr = '!'; *uart_dr = 'T'; *uart_dr = 'A'; *uart_dr = 'S'; *uart_dr = 'K';
 	*uart_dr = '!'; *uart_dr = '\r'; *uart_dr = '\n';

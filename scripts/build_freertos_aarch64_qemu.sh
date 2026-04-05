@@ -72,7 +72,7 @@ if [ -z "$KERNEL" ] || [ ! -f "${KERNEL}/include/FreeRTOS.h" ]; then
     exit 1
 fi
 
-SRC="${PROJ}/src/freertos_aarch64"
+SRC="${PROJ}/src/freertos_aarch64_qemu"
 
 # ── Verify source directory ──────────────────────────────────────────────────
 if [ ! -f "${SRC}/bench_porting_layer_aarch64.c" ]; then
@@ -90,9 +90,9 @@ mkdir -p "$BD"
 CF="-mcpu=cortex-a55 -mgeneral-regs-only -ffreestanding -nostdlib"
 CF="$CF -Wall -Wno-unused-parameter -Wno-unused-variable"
 CF="$CF -include stdbool.h"
-CF="$CF -DFREERTOS_AARCH64"
-CF="$CF -DBOARD_QEMU_VIRT"
+CF="$CF -DFREERTOS_AARCH64 -DFREERTOS_AARCH64_QEMU"
 CF="$CF -DSYS_CLOCK_HW_CYCLES_PER_SEC=62500000"
+CF="$CF -DconfigNUMBER_OF_CORES=4"
 CF="$CF -DITERATIONS=${ITERATIONS} -DCALIBRATION_LOOPS=${CALIBRATION_LOOPS}"
 CF="$CF -I${PROJ}/h"
 CF="$CF -I${SRC}"
@@ -146,7 +146,7 @@ COMPILE_C "${SRC}/port/port.c"                     "${BD}/port.o"               
 echo "--- Board drivers (PL011 + GICv3) ---"
 COMPILE_C "${SRC}/board/pl011_uart.c"              "${BD}/pl011_uart.o"         || ERRORS=$((ERRORS+1))
 COMPILE_C "${SRC}/board/gicv3.c"                   "${BD}/gicv3.o"              || ERRORS=$((ERRORS+1))
-COMPILE_C "${SRC}/board/rk3588_timer.c"            "${BD}/rk3588_timer.o"       || ERRORS=$((ERRORS+1))
+COMPILE_C "${SRC}/board/generic_timer.c"           "${BD}/generic_timer.o"      || ERRORS=$((ERRORS+1))
 
 echo "--- Architecture & timer ---"
 COMPILE_C "${SRC}/arch/aarch64/arch_util.c"        "${BD}/arch_util.o"          || ERRORS=$((ERRORS+1))
@@ -194,7 +194,7 @@ if ! $CC -nostdlib -Wl,--no-warn-rwx-segments \
     "${BD}/port.o" \
     "${BD}/pl011_uart.o" \
     "${BD}/gicv3.o" \
-    "${BD}/rk3588_timer.o" \
+    "${BD}/generic_timer.o" \
     "${BD}/arch_util.o" \
     "${BD}/bench_generic_timer.o" \
     "${BD}/bench_porting.o" \
@@ -240,7 +240,7 @@ echo "  BIN:  ${BD}/freertos_aarch64_qemu.bin (${BIN_SIZE} bytes)"
 echo "  MAP:  ${BD}/freertos_aarch64_qemu.map"
 echo ""
 echo "Run with:"
-echo "  qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a55 -smp 1 -m 256 -nographic -kernel ${BD}/freertos_aarch64_qemu.elf"
+echo "  qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a55 -smp 4 -m 256 -nographic -kernel ${BD}/freertos_aarch64_qemu.elf"
 
 # ── Optionally run in QEMU ────────────────────────────────────────────────────
 if [ "$RUN" -eq 1 ]; then
@@ -251,7 +251,7 @@ if [ "$RUN" -eq 1 ]; then
     qemu-system-aarch64 \
         -M virt,gic-version=3 \
         -cpu cortex-a55 \
-        -smp 1 \
+        -smp 4 \
         -m 256 \
         -nographic \
         -kernel "${BD}/freertos_aarch64_qemu.elf" || true

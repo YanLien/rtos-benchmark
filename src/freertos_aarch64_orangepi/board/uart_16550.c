@@ -1,78 +1,74 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-#include "pl011_uart.h"
+#include "uart_16550.h"
 
 /*
- * Minimal PL011 UART driver for QEMU virt machine.
+ * Minimal 16550 UART driver for RK3588 (Orange Pi 5)
  * Only TX is needed for benchmark output.
  */
 
-/* PL011 register offsets */
-#define UARTDR      0x00
-#define UARTFR      0x18
-#define UARTIBRD    0x24
-#define UARTFBRD    0x28
-#define UARTLCR_H   0x2C
-#define UARTCR      0x30
-#define UARTIMSC    0x38
+/* 16550 register offsets */
+#define UART_THR    0x00  /* Transmit Holding Register (write) */
+#define UART_RBR    0x00  /* Receive Buffer Register (read) */
+#define UART_IER    0x04  /* Interrupt Enable Register */
+#define UART_FCR    0x08  /* FIFO Control Register (write) */
+#define UART_LCR    0x0C  /* Line Control Register */
+#define UART_MCR    0x10  /* Modem Control Register */
+#define UART_LSR    0x14  /* Line Status Register */
+#define UART_MSR    0x18  /* Modem Status Register */
+#define UART_SCR    0x1C  /* Scratch Register */
 
-/* Flag register bits */
-#define FR_TXFF     (1 << 5)   /* Transmit FIFO full */
+/* LSR bits */
+#define LSR_THRE    (1 << 5)  /* Transmit Holding Register Empty */
+#define LSR_DR      (1 << 0)  /* Data Ready */
 
-/* Control register bits */
-#define CR_UARTEN   (1 << 0)   /* UART enable */
-#define CR_TXE      (1 << 8)   /* Transmit enable */
+/* LCR bits */
+#define LCR_DLAB    (1 << 7)  /* Divisor Latch Access Bit */
+#define LCR_8N1     0x03      /* 8 data bits, no parity, 1 stop bit */
 
-/* Line control bits */
-#define LCR_H_FEN   (1 << 4)   /* Enable FIFOs */
-#define LCR_H_8N1   0x60       /* 8 data bits */
+/* FCR bits */
+#define FCR_ENABLE  0x01      /* Enable FIFOs */
+#define FCR_CLEAR  0x06       /* Clear both FIFOs */
 
-static inline void write32(uintptr_t addr, uint32_t val)
+static inline void uart_write_reg(uintptr_t base, uint32_t offset, uint8_t val)
 {
-	*(volatile uint32_t *)addr = val;
+	*(volatile uint8_t *)(base + offset) = val;
 }
 
-static inline uint32_t read32(uintptr_t addr)
+static inline uint8_t uart_read_reg(uintptr_t base, uint32_t offset)
 {
-	return *(volatile uint32_t *)addr;
+	return *(volatile uint8_t *)(base + offset);
 }
 
 void uart_init(uintptr_t base, uint32_t baudrate, uint32_t clk_freq)
 {
-	/* Disable UART */
-	write32(base + UARTCR, 0);
+	uint16_t divisor = (uint16_t)(clk_freq / (16 * baudrate));
 
-	/* Wait for TX FIFO empty */
-	while (read32(base + UARTFR) & FR_TXFF)
-		;
+	/* Disable interrupts */
+	uart_write_reg(base, UART_IER, 0x00);
 
-	/* Disable FIFOs */
-	write32(base + UARTLCR_H, 0);
+	/* Enable DLAB to set baud rate */
+	uart_write_reg(base, UART_LCR, LCR_DLAB);
 
-	/* Set baud rate divisor */
-	if (baudrate > 0 && clk_freq > 0) {
-		uint32_t divider = clk_freq / (16 * baudrate);
-		uint32_t remainder = clk_freq % (16 * baudrate);
-		uint32_t fraction = ((8 * remainder) / baudrate + 1) / 2;
-		write32(base + UARTIBRD, divider & 0xFFFF);
-		write32(base + UARTFBRD, fraction & 0x3F);
-	}
+	/* Set divisor */
+	uart_write_reg(base, 0x00, (uint8_t)(divisor & 0xFF));       /* DLL */
+	uart_write_reg(base, 0x04, (uint8_t)((divisor >> 8) & 0xFF)); /* DLH */
 
-	/* 8 data bits, no parity, 1 stop bit, enable FIFOs */
-	write32(base + UARTLCR_H, LCR_H_8N1 | LCR_H_FEN);
+	/* 8 data bits, no parity, 1 stop bit, clear DLAB */
+	uart_write_reg(base, UART_LCR, LCR_8N1);
 
-	/* Disable all interrupts */
-	write32(base + UARTIMSC, 0);
+	/* Enable FIFOs and clear them */
+	uart_write_reg(base, UART_FCR, FCR_ENABLE | FCR_CLEAR);
 
-	/* Enable UART, TX only */
-	write32(base + UARTCR, CR_UARTEN | CR_TXE);
+	/* Set DTR + RTS */
+	uart_write_reg(base, UART_MCR, 0x03);
 }
 
 void uart_putc(uintptr_t base, char ch)
 {
-	while (read32(base + UARTFR) & FR_TXFF)
+	while (!(uart_read_reg(base, UART_LSR) & LSR_THRE))
 		;
-	write32(base + UARTDR, (uint32_t)ch);
+	uart_write_reg(base, UART_THR, (uint8_t)ch);
 }
 
 void uart_puts(uintptr_t base, const char *str)
@@ -91,7 +87,7 @@ void uart_puts(uintptr_t base, const char *str)
  *   field width (for example %6llu, %-40s)
  *   l / ll length modifiers
  */
-#include "board_config.h"
+#include "orange_pi_5.h"
 
 static void uart_put_repeat(uintptr_t uart_base, char ch, int count)
 {

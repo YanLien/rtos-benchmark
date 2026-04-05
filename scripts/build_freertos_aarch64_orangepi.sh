@@ -1,10 +1,10 @@
 #!/bin/bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# Build FreeRTOS rtos-benchmark for RK3588 (Orange Pi 5, Cortex-A76)
+# Build FreeRTOS rtos-benchmark for Orange Pi 5 Plus (RK3588, Cortex-A55)
 #
 # Usage:
-#   bash scripts/build_freertos_aarch64.sh [OPTIONS]
+#   bash scripts/build_freertos_aarch64_orangepi.sh [OPTIONS]
 #
 # Options:
 #   -k, --kernel PATH    FreeRTOS-Kernel source path
@@ -66,7 +66,7 @@ if [ -z "$KERNEL" ] || [ ! -f "${KERNEL}/include/FreeRTOS.h" ]; then
     exit 1
 fi
 
-SRC="${PROJ}/src/freertos_aarch64"
+SRC="${PROJ}/src/freertos_aarch64_orangepi"
 
 # ── Verify source directory ──────────────────────────────────────────────────
 if [ ! -f "${SRC}/bench_porting_layer_aarch64.c" ]; then
@@ -84,8 +84,7 @@ mkdir -p "$BD"
 CF="-mcpu=cortex-a55 -mgeneral-regs-only -ffreestanding -nostdlib"
 CF="$CF -Wall -Wno-unused-parameter -Wno-unused-variable"
 CF="$CF -include stdbool.h"
-CF="$CF -DFREERTOS_AARCH64"
-CF="$CF -DBOARD_ORANGE_PI_5"
+CF="$CF -DFREERTOS_AARCH64 -DFREERTOS_AARCH64_ORANGEPI"
 CF="$CF -DSYS_CLOCK_HW_CYCLES_PER_SEC=1800000000"
 CF="$CF -DITERATIONS=10000 -DCALIBRATION_LOOPS=10000"
 CF="$CF -I${PROJ}/h"
@@ -124,7 +123,7 @@ COMPILE_S() {
 ERRORS=0
 
 # ── Compile ───────────────────────────────────────────────────────────────────
-echo "=== Building FreeRTOS rtos-benchmark for RK3588 ==="
+echo "=== Building FreeRTOS rtos-benchmark for Orange Pi 5 Plus (RK3588) ==="
 echo "  CC:      $CC"
 echo "  Kernel:  $KERNEL"
 echo "  Output:  $BD"
@@ -208,15 +207,15 @@ if ! $CC -nostdlib -Wl,--no-warn-rwx-segments \
     "${BD}/bench_thread_switch_yield_test.o" \
     "${BD}/bench_interrupt_latency_test.o" \
     -lgcc \
-    -o "${BD}/freertos_aarch64.elf" \
-    -Wl,-Map="${BD}/freertos_aarch64.map" 2>&1; then
+    -o "${BD}/freertos_aarch64_orangepi.elf" \
+    -Wl,-Map="${BD}/freertos_aarch64_orangepi.map" 2>&1; then
     echo ""
     echo "=== LINK FAILED ==="
     exit 1
 fi
 
 # ── Generate binary ───────────────────────────────────────────────────────────
-$OBJCOPY -O binary "${BD}/freertos_aarch64.elf" "${BD}/freertos_aarch64.bin"
+$OBJCOPY -O binary "${BD}/freertos_aarch64_orangepi.elf" "${BD}/freertos_aarch64_orangepi.bin"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
@@ -224,9 +223,9 @@ echo "========================================="
 echo "  BUILD SUCCESSFUL"
 echo "========================================="
 echo ""
-$SIZE "${BD}/freertos_aarch64.elf"
+$SIZE "${BD}/freertos_aarch64_orangepi.elf"
 echo ""
-BIN_SIZE=$(stat --printf='%s' "${BD}/freertos_aarch64.bin")
-echo "  ELF:  ${BD}/freertos_aarch64.elf"
-echo "  BIN:  ${BD}/freertos_aarch64.bin (${BIN_SIZE} bytes)"
-echo "  MAP:  ${BD}/freertos_aarch64.map"
+BIN_SIZE=$(stat --printf='%s' "${BD}/freertos_aarch64_orangepi.bin")
+echo "  ELF:  ${BD}/freertos_aarch64_orangepi.elf"
+echo "  BIN:  ${BD}/freertos_aarch64_orangepi.bin (${BIN_SIZE} bytes)"
+echo "  MAP:  ${BD}/freertos_aarch64_orangepi.map"

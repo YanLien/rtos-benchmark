@@ -62,9 +62,9 @@ QEMU 构建沿用了较大的 `ITERATIONS` 和 `CALIBRATION_LOOPS`。在真机�
 
 涉及文件：
 
-- `src/freertos_aarch64/port/portmacro.h`
-- `src/freertos_aarch64/port/portASM.S`
-- `src/freertos_aarch64/startup_aarch64.S`
+- `src/freertos_aarch64_qemu/port/portmacro.h`
+- `src/freertos_aarch64_qemu/port/portASM.S`
+- `src/freertos_aarch64_qemu/startup_aarch64.S`
 
 ### 2. 修正任务退出和资源回收流程
 
@@ -74,7 +74,7 @@ QEMU 构建沿用了较大的 `ITERATIONS` 和 `CALIBRATION_LOOPS`。在真机�
 
 涉及文件：
 
-- `src/freertos_aarch64/bench_porting_layer_aarch64.c`
+- `src/freertos_aarch64_qemu/bench_porting_layer_aarch64.c`
 
 ### 3. 按 FreeRTOS AArch64 约定把上下文保存在任务栈中
 
@@ -86,8 +86,8 @@ QEMU 构建沿用了较大的 `ITERATIONS` 和 `CALIBRATION_LOOPS`。在真机�
 
 涉及文件：
 
-- `src/freertos_aarch64/port/portASM.S`
-- `src/freertos_aarch64/port/port.c`
+- `src/freertos_aarch64_qemu/port/portASM.S`
+- `src/freertos_aarch64_qemu/port/port.c`
 
 ### 4. 修正定时器 benchmark 处理链
 
@@ -99,8 +99,8 @@ QEMU 构建沿用了较大的 `ITERATIONS` 和 `CALIBRATION_LOOPS`。在真机�
 
 涉及文件：
 
-- `src/freertos_aarch64/timer/bench_generic_timer.c`
-- `src/freertos_aarch64/bench_porting_layer_aarch64.c`
+- `src/freertos_aarch64_qemu/timer/bench_generic_timer.c`
+- `src/freertos_aarch64_qemu/bench_porting_layer_aarch64.c`
 
 ### 5. 禁用不必要的 QEMU FPU 上下文保存
 
@@ -108,7 +108,7 @@ QEMU 当前启动路径下并没有使用到 benchmark 所需的 FP/SIMD 计算�
 
 涉及文件：
 
-- `src/freertos_aarch64/FreeRTOSConfig.h`
+- `src/freertos_aarch64_qemu/FreeRTOSConfig.h`
 
 ### 6. 为 QEMU 单独降低默认迭代规模
 
@@ -121,7 +121,7 @@ QEMU 当前启动路径下并没有使用到 benchmark 所需的 FP/SIMD 计算�
 涉及文件：
 
 - `scripts/build_freertos_aarch64_qemu.sh`
-- `src/freertos_aarch64/freertos_aarch64_qemu.cmake`
+- `src/freertos_aarch64_qemu/freertos_aarch64_qemu.cmake`
 
 ## 验证方法
 

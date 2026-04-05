@@ -1,13 +1,13 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 /*
- * Architecture-specific timing utilities for AArch64 (RK3588).
+ * Architecture-specific timing utilities for AArch64 (QEMU virt).
  * Uses ARM Generic Timer physical counter (CNTPCT_EL0).
  */
 
 #include "arch_api.h"
 #include "bench_api.h"
-#include "board_config.h"
+#include "qemu_virt.h"
 
 #define NSEC_PER_SEC 1000000000ULL
 

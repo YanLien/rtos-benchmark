@@ -18,15 +18,14 @@
 
 /* GICv3 (QEMU virt) */
 #define GICD_BASE              0x08000000UL   /* Distributor */
-#define GICR_BASE              0x080A0000UL   /* Redistributor (PPI 0-31) */
+#define GICR_BASE              0x080A0000UL   /* Redistributor (core 0) */
+#define GICR_STRIDE            0x20000UL      /* 128 KB per Redistributor pair */
 
 /* ARM Generic Timer - QEMU sets CNTFRQ_EL0 to 62.5 MHz */
 #define TIMER_FREQ             62500000UL     /* 62.5 MHz counter frequency */
 
 /* CPU clock - Cortex-A55 in QEMU (matches CNTFRQ_EL0) */
-#ifndef SYS_CLOCK_HW_CYCLES_PER_SEC
 #define SYS_CLOCK_HW_CYCLES_PER_SEC  62500000UL
-#endif
 
 /* EL1 Physical Timer IRQ (PPI 30 - same on all GICv3 platforms) */
 #define TIMER_EL1_IRQ          30
