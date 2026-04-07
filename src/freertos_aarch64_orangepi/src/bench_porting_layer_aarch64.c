@@ -87,11 +87,7 @@ void bench_test_init(void (*test_init_function)(void *))
 	/* Initialize UART for debug output */
 	uart_init(UART2_BASE, UART_CONSOLE_BAUD, UART_CONSOLE_CLK);
 
-#ifdef BOARD_QEMU_VIRT
-	PRINTF("FreeRTOS benchmark on QEMU virt (Cortex-A55)\r\n");
-#else
-	PRINTF("FreeRTOS benchmark on RK3588 (Cortex-A55)\r\n");
-#endif
+	PRINTF("FreeRTOS benchmark on RK3588 Orange Pi 5 Plus (Cortex-A55)\r\n");
 
 	PRINTF("[DEBUG] Initializing GIC...\r\n");
 	/* Initialize GIC */

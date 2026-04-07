@@ -90,9 +90,10 @@ el3_start:
 
     ldr     x0, =_vector_table
     msr     vbar_el1, x0
-    msr     hcr_el2, xzr
+    mov     x0, #0x80000000  /* EL1 executes AArch64 when entered below EL2 */
+    msr     hcr_el2, x0
 
-    mov     x0, #0x1         /* NS bit */
+    mov     x0, #0x401       /* NS|RW: non-secure AArch64 lower EL */
     msr     scr_el3, x0
 
     mov     x0, #0x3c5       /* DAIF masked, EL1h */
@@ -109,8 +110,8 @@ el2_start:
     ldr     x0, =_vector_table
     msr     vbar_el1, x0
 
-    /* Set HCR_EL2: route FIQ/IRQ to EL1, disable EL2 traps */
-    mov     x0, #(1 << 27)   /* TSC: trap SMC to EL1 is fine */
+    /* Set HCR_EL2.RW so EL1 runs in AArch64 after eret */
+    mov     x0, #0x80000000
     msr     hcr_el2, x0
     isb
 

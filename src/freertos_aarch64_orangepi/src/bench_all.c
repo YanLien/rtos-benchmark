@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#include "bench_api.h"
+#include "bench_utils.h"
+
+extern void bench_basic_thread_ops(void *arg);
+extern void bench_interrupt_latency_test(void *arg);
+extern void bench_mutex_lock_unlock_test(void *arg);
+extern void bench_sem_context_switch_init(void *arg);
+extern void bench_sem_signal_release_init(void *arg);
+extern void bench_thread_yield(void *arg);
+extern void bench_malloc_free(void *arg);
+extern void bench_message_queue_init(void *arg);
+
+void bench_all(void *arg)
+{
+	/* Raw UART output to test if task started (bypasses PRINTF) */
+#ifdef BOARD_QEMU_VIRT
+	volatile uint32_t *uart_dr = (volatile uint32_t *)0x09000000;
+	*uart_dr = '!'; *uart_dr = 'T'; *uart_dr = 'A'; *uart_dr = 'S'; *uart_dr = 'K';
+	*uart_dr = '!'; *uart_dr = '\r'; *uart_dr = '\n';
+#elif defined(BOARD_ORANGE_PI_5)
+	volatile unsigned char *uart_base = (volatile unsigned char *)0xFEB50000UL;
+	while (!(uart_base[0x14] & (1u << 5))) { }
+	uart_base[0x00] = 'T';
+	while (!(uart_base[0x14] & (1u << 5))) { }
+	uart_base[0x00] = '\r';
+	while (!(uart_base[0x14] & (1u << 5))) { }
+	uart_base[0x00] = '\n';
+#endif
+
+	PRINTF("\n\r *** Starting! ***\n\n\r");
+
+	bench_basic_thread_ops(arg);
+	bench_mutex_lock_unlock_test(arg);
+	bench_sem_context_switch_init(arg);
+	bench_sem_signal_release_init(arg);
+	bench_thread_yield(arg);
+	bench_malloc_free(arg);
+	bench_message_queue_init(arg);
+
+	/* This should be the last test as it can muck with the timer */
+
+	bench_interrupt_latency_test(arg);
+
+	PRINTF("\n\r *** Done! ***\n\r");
+}
+
+#if RTOS_HAS_MAIN_ENTRY_POINT
+int main(void)
+{
+	bench_test_init(bench_all);
+	return 0;
+}
+#endif
