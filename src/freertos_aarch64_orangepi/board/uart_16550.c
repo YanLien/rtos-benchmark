@@ -87,7 +87,7 @@ void uart_puts(uintptr_t base, const char *str)
  *   field width (for example %6llu, %-40s)
  *   l / ll length modifiers
  */
-#include "orange_pi_5.h"
+#include "board_config.h"
 
 static void uart_put_repeat(uintptr_t uart_base, char ch, int count)
 {

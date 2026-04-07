@@ -8,7 +8,7 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
-#include "orange_pi_5.h"
+#include "board_config.h"
 
 /*-----------------------------------------------------------
  * Application specific definitions

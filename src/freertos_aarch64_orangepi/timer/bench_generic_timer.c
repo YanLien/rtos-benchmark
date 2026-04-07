@@ -6,7 +6,7 @@
  */
 
 #include "bench_api.h"
-#include "orange_pi_5.h"
+#include "board_config.h"
 #include "gicv3.h"
 
 extern void FreeRTOS_Tick_Handler(void);

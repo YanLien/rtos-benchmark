@@ -11,7 +11,7 @@
 #include "semphr.h"
 
 /* Board drivers */
-#include "orange_pi_5.h"
+#include "board_config.h"
 #include "uart_16550.h"
 #include "gicv3.h"
 
