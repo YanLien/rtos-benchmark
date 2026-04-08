@@ -2,13 +2,13 @@
 
 /*
  * Timer interrupt abstraction for benchmark interrupt latency tests.
- * Uses ARM Generic Timer EL1 Physical Timer on RK3588.
+ * Uses the EL1 Physical Timer, which is the timer path already proven to
+ * reach the Orange Pi EL1 IRQ handler.
  */
 
 #include "bench_api.h"
 #include "board_config.h"
 #include "gicv3.h"
-
 extern void FreeRTOS_Tick_Handler(void);
 
 static void freertos_tick_isr(void *arg)
@@ -38,6 +38,11 @@ static inline void write_cntp_ctl_el0(uint64_t val)
 	__asm__ volatile ("isb" ::: "memory");
 }
 
+void bench_exit_timer_isr(void)
+{
+	write_cntp_ctl_el0(0);
+}
+
 bench_isr_handler_t bench_timer_isr_get(void)
 {
 	return timer_isr_handler;
@@ -59,11 +64,11 @@ uint32_t bench_timer_cycles_per_tick(void)
  */
 void bench_timer_isr_set(bench_isr_handler_t handler)
 {
-	timer_isr_handler = handler;
+	timer_isr_handler = (handler != NULL) ? handler : freertos_tick_isr;
 
-	/* Enable timer IRQ in GIC */
+	/* Enable the physical timer IRQ used by both the tick and the benchmark. */
 	gicv3_enable_interrupt(TIMER_EL1_IRQ);
-	gicv3_set_priority(TIMER_EL1_IRQ, 0x40); /* high priority for latency test */
+	gicv3_set_priority(TIMER_EL1_IRQ, configMAX_API_CALL_INTERRUPT_PRIORITY);
 }
 
 bench_time_t bench_timer_cycles_diff(bench_time_t trigger_point,
@@ -97,11 +102,9 @@ bench_time_t bench_timer_isr_expiry_set(uint32_t usec)
 
 void bench_timer_isr_restore(bench_isr_handler_t handler)
 {
-	/* Restore the original tick handler and re-arm for normal tick */
 	timer_isr_handler = (handler != NULL) ? handler : freertos_tick_isr;
 
-	/* Re-arm timer for normal FreeRTOS tick period */
-	uint64_t tval = bench_timer_cycles_per_tick();
-	write_cntp_tval_el0(tval);
+	/* Re-arm the shared physical timer for the normal FreeRTOS tick. */
+	write_cntp_tval_el0(bench_timer_cycles_per_tick());
 	write_cntp_ctl_el0(0x1);
 }

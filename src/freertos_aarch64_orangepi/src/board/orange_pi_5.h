@@ -18,6 +18,8 @@
 /* GIC-600 (GICv3) */
 #define GICD_BASE               0xFD000000UL   /* Distributor */
 #define GICR_BASE               0xFD100000UL   /* Redistributor (PPI 0-31) */
+#define GICR_FRAME_STRIDE       0x20000UL
+#define GICR_FRAME_COUNT        8U
 
 /* ARM Generic Timer */
 #define TIMER_FREQ              24000000UL     /* 24 MHz counter frequency */
@@ -29,6 +31,8 @@
 
 /* EL1 Physical Timer IRQ (GIC SPI ID = 30 + 32 = 62 in GICv3) */
 #define TIMER_EL1_IRQ           30
+/* EL1 Virtual Timer IRQ for benchmark-only latency measurements */
+#define BENCH_TIMER_IRQ         27
 
 /* GIC Distributor register offsets */
 #define GICD_CTLR               0x0000

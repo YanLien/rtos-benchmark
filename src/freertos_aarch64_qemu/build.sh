@@ -73,6 +73,7 @@ if [ -z "$KERNEL" ] || [ ! -f "${KERNEL}/include/FreeRTOS.h" ]; then
 fi
 
 SRC="${PROJ}/src"
+COMMON_SRC="${PROJ}/../common"
 
 # ── Verify source directory ──────────────────────────────────────────────────
 if [ ! -f "${SRC}/bench_porting_layer_aarch64.c" ]; then
@@ -165,16 +166,14 @@ COMPILE_C "${KERNEL}/stream_buffer.c"              "${BD}/stream_buffer.o"      
 COMPILE_C "${KERNEL}/event_groups.c"               "${BD}/event_groups.o"       || ERRORS=$((ERRORS+1))
 
 echo "--- Benchmark framework ---"
-COMPILE_C "${SRC}/bench_utils.c"                   "${BD}/bench_utils.o"        || ERRORS=$((ERRORS+1))
-COMPILE_C "${SRC}/bench_all.c"                     "${BD}/bench_all.o"          || ERRORS=$((ERRORS+1))
+COMPILE_C "${COMMON_SRC}/bench_utils.c"            "${BD}/bench_utils.o"        || ERRORS=$((ERRORS+1))
+COMPILE_C "${COMMON_SRC}/bench_all.c"              "${BD}/bench_all.o"          || ERRORS=$((ERRORS+1))
 
 echo "--- Benchmark tests ---"
 for test in thread malloc_free message_queue mutex_lock_unlock \
             sem_context_switch sem_signal_release thread_switch_yield \
             interrupt_latency; do
-    if [ -f "${SRC}/tests/bench_${test}_test.c" ]; then
-        COMPILE_C "${SRC}/tests/bench_${test}_test.c" "${BD}/bench_${test}_test.o" || ERRORS=$((ERRORS+1))
-    fi
+    COMPILE_C "${COMMON_SRC}/bench_${test}_test.c" "${BD}/bench_${test}_test.o" || ERRORS=$((ERRORS+1))
 done
 
 if [ "$ERRORS" -gt 0 ]; then

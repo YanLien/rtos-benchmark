@@ -16,6 +16,14 @@ static inline uint32_t read32(uintptr_t addr)
 	return *(volatile uint32_t *)addr;
 }
 
+static inline uint64_t read64(uintptr_t addr)
+{
+	uint64_t lo = read32(addr);
+	uint64_t hi = read32(addr + 4U);
+
+	return lo | (hi << 32);
+}
+
 /* GICv3 system register access via inline assembly */
 
 static inline void write_icc_pmr_el1(uint64_t val)
@@ -82,112 +90,182 @@ static inline void isb(void)
 	__asm__ volatile ("isb" ::: "memory");
 }
 
-/*
- * Wait for Redistributor to report all register writes are complete
- * by polling WAKER.ProcessorSleep == 0 && WAKER.ChildrenAsleep == 0
- */
-static void gicr_wait_for_rwp(uintptr_t gicr_base)
+static void gicr_wait_for_write_pending(uintptr_t gicr_base)
 {
-	uint32_t val;
+	while ((read32(gicr_base + GICR_CTLR) & (1U << 3)) != 0U) {
+	}
+}
 
-	/* First, ensure ProcessorSleep is cleared */
-	val = read32(gicr_base + GICR_WAKER);
-	val &= ~(1U << 1); /* clear ProcessorSleep bit */
-	write32(gicr_base + GICR_WAKER, val);
+static inline uint64_t read_mpidr_el1(void)
+{
+	uint64_t val;
 
-	/* Wait for ChildrenAsleep to clear */
-	do {
-		val = read32(gicr_base + GICR_WAKER);
-	} while (val & (1U << 2)); /* ChildrenAsleep */
+	__asm__ volatile ("mrs %0, mpidr_el1" : "=r" (val));
+	return val;
+}
+
+static uintptr_t gicr_base_for_current_cpu(void)
+{
+	static uintptr_t cached_gicr_base;
+	uintptr_t gicr;
+	uint64_t mpidr;
+	uint64_t affinity;
+	uint64_t typer;
+	uint32_t i;
+
+	if (cached_gicr_base != 0U)
+		return cached_gicr_base;
+
+	mpidr = read_mpidr_el1();
+	affinity = ((mpidr >> 8) & 0xFF000000ULL) | (mpidr & 0x00FFFFFFULL);
+	gicr = GICR_BASE;
+
+	for (i = 0; i < GICR_FRAME_COUNT; i++) {
+		typer = read64(gicr + GICR_TYPER);
+
+		if ((typer >> 32) == affinity) {
+			cached_gicr_base = gicr;
+			return cached_gicr_base;
+		}
+
+		gicr += GICR_FRAME_STRIDE;
+	}
+
+	cached_gicr_base = GICR_BASE;
+	return cached_gicr_base;
+}
+
+typedef void (*gicr_apply_fn_t)(uintptr_t gicr_base, uint32_t intid, uint8_t priority);
+
+static void gicr_apply_to_all_redistributors(gicr_apply_fn_t fn, uint32_t intid, uint8_t priority)
+{
+	uintptr_t gicr = GICR_BASE;
+	uint32_t i;
+
+	for (i = 0; i < GICR_FRAME_COUNT; i++) {
+		fn(gicr, intid, priority);
+		gicr += GICR_FRAME_STRIDE;
+	}
+}
+
+/* Wake up the Redistributor: clear ProcessorSleep and wait for ChildrenAsleep to clear */
+static void gicr_wakeup(uintptr_t gicr_base)
+{
+    uint32_t val;
+
+    val = read32(gicr_base + GICR_WAKER);
+    val &= ~(1U << 1); /* clear ProcessorSleep */
+    write32(gicr_base + GICR_WAKER, val);
+
+    do {
+        val = read32(gicr_base + GICR_WAKER);
+    } while (val & (1U << 2)); /* wait for ChildrenAsleep == 0 */
+}
+
+static void gicr_configure_ppi_defaults(uintptr_t gicr_base, uint32_t intid, uint8_t priority)
+{
+	uint32_t i;
+
+	(void)intid;
+	(void)priority;
+
+	write32(gicr_base + GICR_IGROUPR0, 0xFFFFFFFF);
+	write32(gicr_base + GICR_IGROUPMODR0, 0x0);
+
+	for (i = 0; i < 32; i += 4) {
+		write32(gicr_base + GICR_IPRIORITYR(i), 0xA0A0A0A0);
+	}
+
+	write32(gicr_base + GICR_ICENABLER0, 0xFFFFFFFF);
+	gicr_wait_for_write_pending(gicr_base);
+	write32(gicr_base + GICR_ICPENDR0, 0xFFFFFFFF);
+	gicr_wait_for_write_pending(gicr_base);
+}
+
+static void gicr_enable_ppi(uintptr_t gicr_base, uint32_t intid, uint8_t priority)
+{
+	(void)priority;
+
+	write32(gicr_base + GICR_ISENABLER0, 1U << (intid % 32));
+	gicr_wait_for_write_pending(gicr_base);
+}
+
+static void gicr_disable_ppi(uintptr_t gicr_base, uint32_t intid, uint8_t priority)
+{
+	(void)priority;
+
+	write32(gicr_base + GICR_ICENABLER0, 1U << (intid % 32));
+	gicr_wait_for_write_pending(gicr_base);
+}
+
+static void gicr_set_ppi_priority(uintptr_t gicr_base, uint32_t intid, uint8_t priority)
+{
+	uintptr_t addr = gicr_base + GICR_IPRIORITYR(intid & ~3U);
+	uint32_t shift = (intid & 3U) * 8U;
+	uint32_t val = read32(addr);
+
+	val &= ~(0xFFU << shift);
+	val |= ((uint32_t)priority) << shift;
+	write32(addr, val);
+	dsb();
 }
 
 void gicv3_init(void)
 {
-	uint32_t i;
-	uintptr_t gicd = GICD_BASE;
-	uintptr_t gicr = GICR_BASE;
+    uint32_t i;
+    uintptr_t gicd = GICD_BASE;
+    uintptr_t gicr = gicr_base_for_current_cpu();
 
-	/* Enable system register interface (SRE) */
-	write_icc_sre_el1(0x7);
-	isb();
+    write_icc_sre_el1(0x7);
+    isb();
 
-	/*
-	 * If running at EL3, also enable SRE at EL3 and allow lower ELs.
-	 * For bare-metal AMP on RK3588, u-boot typically runs at EL2/EL3
-	 * and the secondary core enters at EL1. We assume SRE is already
-	 * enabled by firmware.
-	 */
+    /* Disable Distributor */
+    write32(gicd + GICD_CTLR, 0x0);
+    dsb();
 
-	/* Disable Distributor before configuration */
-	write32(gicd + GICD_CTLR, 0x0);
-	dsb();
+    /* Group 1 for all SPIs */
+    for (i = 32; i < 1020; i += 32) {
+        write32(gicd + GICD_IGROUPR(i),    0xFFFFFFFF);
+        write32(gicd + GICD_IGROUPMODR(i), 0x0);
+    }
 
-	/* Set all SPI interrupts to Group 1 (IRQ) */
-	for (i = 32; i < 1020; i += 32) {
-		write32(gicd + GICD_IGROUPR(i), 0xFFFFFFFF);
-		write32(gicd + GICD_IGROUPMODR(i), 0x0);
-	}
+    /* Default priority */
+    for (i = 0; i < 1020; i += 4) {
+        write32(gicd + GICD_IPRIORITYR_NB(i), 0xA0A0A0A0);
+    }
 
-	/* Set all PPI (0-31) to Group 1 */
-	write32(gicr + GICR_IGROUPR0, 0xFFFFFFFF);
-	write32(gicr + GICR_IGROUPMODR0, 0x0);
+    /* Disable and clear pending for all SPIs */
+    for (i = 32; i < 1020; i += 32) {
+        write32(gicd + GICD_ICENABLER(i), 0xFFFFFFFF);
+        write32(gicd + GICD_ICPENDR(i),   0xFFFFFFFF);
+    }
 
-	/* Set default priority for all interrupts */
-	for (i = 0; i < 1020; i += 4) {
-		write32(gicd + GICD_IPRIORITYR_NB(i), 0xA0A0A0A0);
-	}
-	/* PPI priorities */
-	for (i = 0; i < 32; i += 4) {
-		write32(gicr + GICR_IPRIORITYR(i), 0xA0A0A0A0);
-	}
+    /* Wake up Redistributor, then configure PPIs */
+    gicr_wakeup(gicr);
+    gicr_configure_ppi_defaults(gicr, 0U, 0U);
 
-	/* Disable all SPIs */
-	for (i = 32; i < 1020; i += 32) {
-		write32(gicd + GICD_ICENABLER(i), 0xFFFFFFFF);
-	}
-	/* Disable all PPIs/SGIs */
-	write32(gicr + GICR_ICENABLER0, 0xFFFFFFFF);
+    /* Enable Distributor: ARE_NS + EnableGrp1NS */
+    write32(gicd + GICD_CTLR, (1U << 4) | (1U << 1));
+    dsb();
 
-	/* Clear all pending */
-	for (i = 32; i < 1020; i += 32) {
-		write32(gicd + GICD_ICPENDR(i), 0xFFFFFFFF);
-	}
-
-	/* Wait for Redistributor */
-	gicr_wait_for_rwp(gicr);
-
-	/* Enable Distributor (Group 1) */
-	write32(gicd + GICD_CTLR, 0x2);
-	dsb();
-
-	/* Set PMR to allow all priorities */
-	write_icc_pmr_el1(0xFF);
-
-	/* Set binary point register */
-	write_icc_bpr0_el1(0x0);
-
-	/* Enable Group 1 interrupts at CPU interface */
-	write_icc_igrpen1_el1(0x1);
-	isb();
+    write_icc_pmr_el1(0xFF);
+    write_icc_bpr0_el1(0x0);
+    write_icc_igrpen1_el1(0x1);
+    isb();
 }
 
 void gicv3_enable_interrupt(uint32_t intid)
 {
-	uintptr_t base;
-	uint32_t reg;
-
-	if (intid < 32) {
-		/* PPI/SGI - use Redistributor */
-		base = GICR_BASE;
-		reg = read32(base + GICR_ISENABLER0);
-		reg |= (1U << (intid % 32));
-		write32(base + GICR_ISENABLER0, reg);
-	} else {
-		/* SPI - use Distributor */
-		base = GICD_BASE;
-		write32(base + GICD_ISENABLER(intid), 1U << (intid % 32));
-	}
-	dsb();
+    if (intid < 32) {
+        gicr_apply_to_all_redistributors(gicr_enable_ppi, intid, 0U);
+    } else {
+        /* Route SPI to CPU0 (mpidr affinity = 0) */
+        write32(GICD_BASE + GICD_IROUTER(intid),     0x0U); /* low 32 bits */
+        write32(GICD_BASE + GICD_IROUTER(intid) + 4, 0x0U); /* high 32 bits */
+        write32(GICD_BASE + GICD_ISENABLER(intid),
+                1U << (intid % 32));
+    }
+    dsb();
 }
 
 void gicv3_disable_interrupt(uint32_t intid)
@@ -195,8 +273,7 @@ void gicv3_disable_interrupt(uint32_t intid)
 	uintptr_t base;
 
 	if (intid < 32) {
-		base = GICR_BASE;
-		write32(base + GICR_ICENABLER0, 1U << (intid % 32));
+		gicr_apply_to_all_redistributors(gicr_disable_ppi, intid, 0U);
 	} else {
 		base = GICD_BASE;
 		write32(base + GICD_ICENABLER(intid), 1U << (intid % 32));
@@ -206,12 +283,21 @@ void gicv3_disable_interrupt(uint32_t intid)
 
 void gicv3_set_priority(uint32_t intid, uint8_t priority)
 {
+	uintptr_t addr;
+	uint32_t shift;
+	uint32_t val;
+
 	if (intid < 32) {
 		/* PPI/SGI */
-		*(volatile uint8_t *)(GICR_BASE + GICR_IPRIORITYR(intid)) = priority;
+		gicr_apply_to_all_redistributors(gicr_set_ppi_priority, intid, priority);
 	} else {
 		/* SPI */
-		*(volatile uint8_t *)(GICD_BASE + GICD_IPRIORITYR(intid)) = priority;
+		addr = GICD_BASE + GICD_IPRIORITYR_NB(intid);
+		shift = (intid & 3U) * 8U;
+		val = read32(addr);
+		val &= ~(0xFFU << shift);
+		val |= ((uint32_t)priority) << shift;
+		write32(addr, val);
 	}
 	dsb();
 }

@@ -26,5 +26,6 @@ typedef void * bench_work;
 #define RTOS_HAS_THREAD_CREATE_START  0
 #define RTOS_HAS_SUSPEND_RESUME       1
 #define RTOS_HAS_MAIN_ENTRY_POINT     1
+#define RTOS_HAS_MESSAGE_QUEUE        1
 
 #endif /* PORTING_LAYER_AARCH64_H_ */

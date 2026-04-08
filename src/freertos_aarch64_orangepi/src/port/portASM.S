@@ -29,7 +29,6 @@
 .extern vTaskSwitchContext
 .extern vApplicationIRQHandler
 .extern FreeRTOS_Tick_Handler
-.extern bench_all
 
 .extern ullICCIARValue
 
@@ -259,29 +258,6 @@
     /* Restore exception state. */
     ldp     x2, x3, [sp], #0x10
 
-    /* Probe which task entry point is being restored. */
-    ldr     x9, =bench_all
-    cmp     x2, x9
-    b.ne    3f
-    ldr     x9, =0xFEB50014
-1:
-    ldrb    w10, [x9]
-    tst     w10, #0x20
-    b.eq    1b
-    ldr     x9, =0xFEB50000
-    mov     w10, #'B'
-    strb    w10, [x9]
-    b       4f
-3:
-    ldr     x9, =0xFEB50014
-2:
-    ldrb    w10, [x9]
-    tst     w10, #0x20
-    b.eq    2b
-    ldr     x9, =0xFEB50000
-    mov     w10, #'O'
-    strb    w10, [x9]
-4:
     msr     ELR_EL1, x2
     msr     SPSR_EL1, x3
 
@@ -316,14 +292,6 @@
  */
 .global FreeRTOS_SWI_Handler
 FreeRTOS_SWI_Handler:
-    ldr     x9, =0xFEB50014
-1:
-    ldrb    w10, [x9]
-    tst     w10, #0x20
-    b.eq    1b
-    ldr     x9, =0xFEB50000
-    mov     w10, #'S'
-    strb    w10, [x9]
     portSAVE_CONTEXT
 
     mrs     x0, ESR_EL1
@@ -352,14 +320,6 @@ vPortYield:
  */
 .global FreeRTOS_IRQ_Handler
 FreeRTOS_IRQ_Handler:
-    ldr     x9, =0xFEB50014
-1:
-    ldrb    w10, [x9]
-    tst     w10, #0x20
-    b.eq    1b
-    ldr     x9, =0xFEB50000
-    mov     w10, #'I'
-    strb    w10, [x9]
     /* Save context */
     portSAVE_CONTEXT
 
@@ -410,14 +370,6 @@ FreeRTOS_IRQ_Handler:
  */
 .global vPortRestoreTaskContext
 vPortRestoreTaskContext:
-    ldr     x9, =0xFEB50014
-1:
-    ldrb    w10, [x9]
-    tst     w10, #0x20
-    b.eq    1b
-    ldr     x9, =0xFEB50000
-    mov     w10, #'R'
-    strb    w10, [x9]
     portRESTORE_CONTEXT
 
 /*-----------------------------------------------------------*/

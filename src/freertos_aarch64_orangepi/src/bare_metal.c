@@ -69,3 +69,33 @@ void vPortUnexpectedSyncException(uint64_t esr, uint64_t elr,
 	for (;;)
 		;
 }
+
+void vPortUnexpectedFiqException(uint64_t esr, uint64_t elr,
+				 uint64_t far, uint64_t spsr)
+{
+	extern int uart_printf(const char *fmt, ...);
+
+	uart_printf("\r\nUNEXPECTED FIQ EXCEPTION\r\n");
+	uart_printf("  ESR_EL1 = 0x%llx\r\n", esr);
+	uart_printf("  ELR_EL1 = 0x%llx\r\n", elr);
+	uart_printf("  FAR_EL1 = 0x%llx\r\n", far);
+	uart_printf("  SPSR_EL1 = 0x%llx\r\n", spsr);
+
+	for (;;)
+		;
+}
+
+void vPortUnexpectedSErrorException(uint64_t esr, uint64_t elr,
+				    uint64_t far, uint64_t spsr)
+{
+	extern int uart_printf(const char *fmt, ...);
+
+	uart_printf("\r\nUNEXPECTED SERROR EXCEPTION\r\n");
+	uart_printf("  ESR_EL1 = 0x%llx\r\n", esr);
+	uart_printf("  ELR_EL1 = 0x%llx\r\n", elr);
+	uart_printf("  FAR_EL1 = 0x%llx\r\n", far);
+	uart_printf("  SPSR_EL1 = 0x%llx\r\n", spsr);
+
+	for (;;)
+		;
+}

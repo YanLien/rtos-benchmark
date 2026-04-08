@@ -5,6 +5,8 @@
 
 #include <stdint.h>
 
+#define GICD_IROUTER(intid)   (0x6000U + (uintptr_t)(intid) * 8U)
+
 /*
  * GIC-600 (GICv3) minimal driver for RK3588
  * Uses system register interface (ICC_*_EL1).

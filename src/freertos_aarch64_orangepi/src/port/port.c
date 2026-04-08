@@ -100,6 +100,7 @@ __attribute__( ( used ) ) const uint64_t ullMaxAPIPriorityMask =
 	( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT );
 
 extern void vPortRestoreTaskContext(void);
+extern void vPortLogInitialStack(uint64_t pxCode, uint64_t *pxTopOfStack);
 
 /*-----------------------------------------------------------*/
 

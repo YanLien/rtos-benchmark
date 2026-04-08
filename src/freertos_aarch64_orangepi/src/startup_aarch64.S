@@ -22,6 +22,8 @@
 .extern FreeRTOS_IRQ_Handler
 .extern FreeRTOS_SWI_Handler
 .extern vPortUnexpectedSyncException
+.extern vPortUnexpectedFiqException
+.extern vPortUnexpectedSErrorException
 
 /*
  * Exception vector table for EL1.
@@ -34,9 +36,9 @@ _vector_table:
     .align 7
     b   FreeRTOS_IRQ_Handler       /* +0x080 IRQ */
     .align 7
-    b   hang                       /* +0x100 FIQ */
+    b   Fiq_Handler                /* +0x100 FIQ */
     .align 7
-    b   hang                       /* +0x180 SError */
+    b   SError_Handler             /* +0x180 SError */
     .align 7
 
     /* Current EL with SPx - keep these routed too for debug/bring-up */
@@ -44,9 +46,9 @@ _vector_table:
     .align 7
     b   FreeRTOS_IRQ_Handler       /* +0x280 IRQ */
     .align 7
-    b   hang                       /* +0x300 FIQ */
+    b   Fiq_Handler                /* +0x300 FIQ */
     .align 7
-    b   hang                       /* +0x380 SError */
+    b   SError_Handler             /* +0x380 SError */
     .align 7
 
     /* Lower EL using AArch64 - not used in bare metal */
@@ -94,6 +96,10 @@ el3_start:
     mov     x0, #0x80000000  /* EL1 executes AArch64 when entered below EL2 */
     msr     hcr_el2, x0
 
+    /* Allow EL1 to access physical timer and counter */
+    mov     x0, #0x3         /* EL1PCTEN | EL1PCEN */
+    msr     cnthctl_el2, x0
+
     mov     x0, #0x401       /* NS|RW: non-secure AArch64 lower EL */
     msr     scr_el3, x0
 
@@ -115,6 +121,10 @@ el2_start:
     mov     x0, #0x80000000
     msr     hcr_el2, x0
     isb
+
+    /* Allow EL1 to access physical timer and counter */
+    mov     x0, #0x3         /* EL1PCTEN | EL1PCEN */
+    msr     cnthctl_el2, x0
 
     /* Return to EL1h with all interrupts masked */
     mov     x0, #0x3c5       /* DAIF masked, EL1h (SP = SP_EL1) */
@@ -173,6 +183,26 @@ Sync_Handler:
     mrs     x2, FAR_EL1
     mrs     x3, SPSR_EL1
     bl      vPortUnexpectedSyncException
+    b       .
+
+.align 3
+Fiq_Handler:
+    msr     spsel, #1
+    mrs     x0, ESR_EL1
+    mrs     x1, ELR_EL1
+    mrs     x2, FAR_EL1
+    mrs     x3, SPSR_EL1
+    bl      vPortUnexpectedFiqException
+    b       .
+
+.align 3
+SError_Handler:
+    msr     spsel, #1
+    mrs     x0, ESR_EL1
+    mrs     x1, ELR_EL1
+    mrs     x2, FAR_EL1
+    mrs     x3, SPSR_EL1
+    bl      vPortUnexpectedSErrorException
     b       .
 
 

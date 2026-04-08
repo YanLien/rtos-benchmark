@@ -19,6 +19,8 @@
 
 #include <assert.h>
 
+extern void FreeRTOS_Tick_Handler(void);
+
 #define MAX_SEMAPHORES 5
 #define MAX_THREADS 10
 #define STACK_SIZE (configMINIMAL_STACK_SIZE + 200)
@@ -55,7 +57,8 @@ static StaticQueue_t queue_buffer[MAX_QUEUES];
  */
 void vSetupTickInterrupt(void)
 {
-	/* EL1 Physical Timer is set up in board/rk3588_timer.c */
+	/* EL1 Physical Timer is configured, but GIC PPI enable is deferred while
+	 * isolating the scheduler-start SError source. */
 	extern void rk3588_timer_setup_tick(uint32_t tick_hz);
 	rk3588_timer_setup_tick(configTICK_RATE_HZ);
 }
@@ -68,7 +71,9 @@ void vClearTickInterrupt(void)
 
 /*
  * Application IRQ handler - called by FreeRTOS IRQ handler.
- * We only handle the EL1 Physical Timer IRQ here.
+ * The benchmark temporarily replaces the physical timer ISR while measuring
+ * interrupt latency, so TIMER_EL1_IRQ must always dispatch via the current
+ * registered timer handler.
  */
 void vApplicationIRQHandler(uint32_t intid)
 {
