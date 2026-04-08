@@ -92,13 +92,11 @@ void rk3588_timer_setup_tick(uint32_t tick_hz)
 	write_cntp_tval_el0(tval);
 	isb();
 
-	/* Enable timer with IRQ generation: bit0=Enable, bit1=IMASK (0=unmasked) */
-	write_cntp_ctl_el0(0x1);
-	isb();
-
-	/* Enable the timer IRQ in GIC */
-	gicv3_enable_interrupt(TIMER_EL1_IRQ);
-	gicv3_set_priority(TIMER_EL1_IRQ, 0x80); /* medium priority */
+	/*
+	 * Diagnostic isolation: keep the tick IRQ disabled while debugging the
+	 * first-task entry fault on Orange Pi. If the task now starts, the bug is
+	 * in the early IRQ save/restore path rather than in the initial eret path.
+	 */
 }
 
 /*

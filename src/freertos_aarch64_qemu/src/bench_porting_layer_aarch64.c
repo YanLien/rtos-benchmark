@@ -178,7 +178,10 @@ void bench_sem_give(int sem_id)
 
 void bench_sem_give_from_isr(int sem_id)
 {
-	xSemaphoreGiveFromISR(semaphores[sem_id], NULL);
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+	xSemaphoreGiveFromISR(semaphores[sem_id], &xHigherPriorityTaskWoken);
+	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 int bench_sem_take(int sem_id)

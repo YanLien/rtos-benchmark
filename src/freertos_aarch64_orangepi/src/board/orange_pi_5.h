@@ -15,9 +15,9 @@
 #define UART_CONSOLE_BAUD       1500000UL
 #define UART_CONSOLE_CLK        24000000UL
 
-/* GIC-600 (GICv3) */
-#define GICD_BASE               0xFD000000UL   /* Distributor */
-#define GICR_BASE               0xFD100000UL   /* Redistributor (PPI 0-31) */
+/* GICv3 / GIC-600 from this DT */
+#define GICD_BASE               0xFE600000UL   /* Distributor */
+#define GICR_BASE               0xFE680000UL   /* Redistributor */
 #define GICR_FRAME_STRIDE       0x20000UL
 #define GICR_FRAME_COUNT        8U
 

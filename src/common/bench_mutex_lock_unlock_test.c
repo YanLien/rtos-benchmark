@@ -41,7 +41,7 @@ static struct bench_stats times[NUM_TIMES];
 static bench_time_t  helper_start;
 static bench_time_t  helper_end;
 
-static const char *report_strings[NUM_TIMES] = {
+static const char * const report_strings[NUM_TIMES] = {
     "Lock (no owner)",
     "Unlock (no waiters)",
     "Recursive lock",
