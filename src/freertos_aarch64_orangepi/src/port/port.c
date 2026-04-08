@@ -11,6 +11,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#include <stdint.h>
 #include <string.h>
 
 /* GICv3 system register access helpers */
@@ -101,6 +102,40 @@ __attribute__( ( used ) ) const uint64_t ullMaxAPIPriorityMask =
 
 extern void vPortRestoreTaskContext(void);
 extern void vPortLogInitialStack(uint64_t pxCode, uint64_t *pxTopOfStack);
+extern void * volatile pxCurrentTCB;
+
+static void vPortLogSchedulerStartState(void)
+{
+	volatile uintptr_t *tcb;
+	volatile uintptr_t *stack_top;
+
+	extern int uart_printf(const char *fmt, ...);
+
+	tcb = (volatile uintptr_t *)pxCurrentTCB;
+	uart_printf("[DEBUG] pxCurrentTCB = 0x%llx\r\n",
+		    (unsigned long long)(uintptr_t)tcb);
+
+	if (tcb == NULL) {
+		uart_printf("[DEBUG] pxCurrentTCB is NULL before first restore\r\n");
+		return;
+	}
+
+	stack_top = (volatile uintptr_t *)tcb[0];
+	uart_printf("[DEBUG] first task top-of-stack = 0x%llx\r\n",
+		    (unsigned long long)(uintptr_t)stack_top);
+
+	if (stack_top == NULL) {
+		uart_printf("[DEBUG] first task stack pointer is NULL\r\n");
+		return;
+	}
+
+	uart_printf("[DEBUG] stack[0]=0x%llx stack[1]=0x%llx\r\n",
+		    (unsigned long long)stack_top[0],
+		    (unsigned long long)stack_top[1]);
+	uart_printf("[DEBUG] stack[2]=0x%llx stack[3]=0x%llx\r\n",
+		    (unsigned long long)stack_top[2],
+		    (unsigned long long)stack_top[3]);
+}
 
 /*-----------------------------------------------------------*/
 
@@ -228,6 +263,8 @@ BaseType_t xPortStartScheduler(void)
 
 		/* Start the tick timer */
 		configSETUP_TICK_INTERRUPT();
+
+		vPortLogSchedulerStartState();
 
 		/* Start the first task */
 		vPortRestoreTaskContext();
