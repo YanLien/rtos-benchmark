@@ -47,10 +47,10 @@ cp build/freertos_aarch64_orangepi.bin /path/to/sd-card/
 
 ```bash
 # 从 SD 卡加载二进制文件到内存
-=> fatload mmc 1:1 0x00200000 freertos_aarch64_orangepi.bin
+=> fatload mmc 1:1 0x40000000 freertos_aarch64_orangepi.bin
 
 # 启动执行
-=> go 0x00200000
+=> go 0x40000800
 ```
 
 通过串口 (UART2, 1500000 波特率) 查看输出结果。
@@ -80,6 +80,6 @@ ITERATIONS=5000 CALIBRATION_LOOPS=5000 bash build.sh -k /path/to/FreeRTOS-Kernel
 - **中断控制器**: GIC-600 (GICv3 系统寄存器接口)
 - **定时器**: ARM Generic Timer (EL1 Physical Timer, 24 MHz)
 - **CPU 时钟**: 1.8 GHz (Cortex-A55 LITTLE 集群)
-- **内存起始**: 0x00200000 (保留 RAM 区域, 16MB)
+- **内存起始**: 0x40000000 (保留 RAM 区域, 16MB)
 - **运行模式**: EL1 裸金属 AMP (与 Linux 并行运行)
 - **目标核心**: Cortex-A55 (CPU0-3 LITTLE 集群)

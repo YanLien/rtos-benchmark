@@ -2,7 +2,7 @@
  * Linker script for FreeRTOS benchmark on RK3588 (AArch64 bare metal AMP).
  *
  * Memory layout for Orange Pi 5:
- * - The binary is loaded at 0x00200000 (reserved RAM region)
+ * - The binary is loaded at 0x40000000 (reserved RAM region)
  * - Linux runs on other cores using the rest of DRAM
  * - Total region: 16 MB (enough for benchmark + stacks)
  */
@@ -11,7 +11,7 @@ ENTRY(Reset_Handler)
 
 MEMORY
 {
-    RAM (rwx) : ORIGIN = 0x00200000, LENGTH = 16M
+    RAM (rwx) : ORIGIN = 0x40000000, LENGTH = 16M
 }
 
 SECTIONS

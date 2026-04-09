@@ -155,8 +155,19 @@ clear_bss:
     b.lt    clear_bss
 
 2:
-    /* Invalidate caches */
+    /* Invalidate caches before enabling */
     ic      iallu
+    dsb     sy
+    isb
+
+    /* Enable I-Cache and branch prediction only.
+     * D-Cache requires MMU with proper page tables to mark device
+     * regions (GIC, UART) as Device-nGnRnE; without that, cached
+     * device-register accesses cause silent data corruption. */
+    mrs     x0, sctlr_el1
+    orr     x0, x0, #(1 << 12)   /* I:  Instruction Cache */
+    orr     x0, x0, #(1 << 11)   /* Z:  Branch Prediction */
+    msr     sctlr_el1, x0
     isb
 
     /* Jump to C entry point */

@@ -10,6 +10,7 @@
 #   -k, --kernel PATH    FreeRTOS-Kernel source path
 #   -o, --output PATH    Build output directory (default: build)
 #   -c, --clean          Clean before build
+#   -i, --enable-interrupt-latency  Enable interrupt latency benchmark in bench_all
 #   -f, --flash HOST     Flash binary to Orange Pi via scp
 #   -h, --help           Show this help
 #
@@ -34,6 +35,7 @@ BD="${PROJ}/build"
 KERNEL=""
 CLEAN=0
 FLASH=""
+ENABLE_INTERRUPT_LATENCY="${ENABLE_INTERRUPT_LATENCY:-0}"
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -41,6 +43,7 @@ while [[ $# -gt 0 ]]; do
         -k|--kernel)   KERNEL="$2"; shift 2 ;;
         -o|--output)   BD="$2"; shift 2 ;;
         -c|--clean)    CLEAN=1; shift ;;
+        -i|--enable-interrupt-latency) ENABLE_INTERRUPT_LATENCY=1; shift ;;
         -f|--flash)    FLASH="$2"; shift 2 ;;
         -h|--help)
             sed -n '2,15p' "$0" | sed 's/^# \?//'
@@ -89,12 +92,16 @@ mkdir -p "$BD"
 
 # ── Compiler flags ────────────────────────────────────────────────────────────
 CF="-mcpu=cortex-a55 -mgeneral-regs-only -ffreestanding -nostdlib -fno-pic -fno-pie"
+CF="$CF -O2"
 CF="$CF -Wall -Wno-unused-parameter -Wno-unused-variable"
 CF="$CF -include stdbool.h"
 CF="$CF -DFREERTOS_AARCH64"
 CF="$CF -DBOARD_ORANGE_PI_5"
 CF="$CF -DSYS_CLOCK_HW_CYCLES_PER_SEC=1800000000"
 CF="$CF -DITERATIONS=${ITERATIONS} -DCALIBRATION_LOOPS=${CALIBRATION_LOOPS}"
+if [ "$ENABLE_INTERRUPT_LATENCY" != "1" ]; then
+    CF="$CF -DSKIP_INTERRUPT_LATENCY_BENCH=1"
+fi
 CF="$CF -I${PROJ}/h"
 CF="$CF -I${SRC}"
 CF="$CF -I${SRC}/board"
@@ -137,6 +144,7 @@ echo "  Kernel:  $KERNEL"
 echo "  Output:  $BD"
 echo "  Iter:    $ITERATIONS"
 echo "  Calib:   $CALIBRATION_LOOPS"
+echo "  EnableIRQ: $ENABLE_INTERRUPT_LATENCY"
 echo ""
 
 echo "--- Startup & FreeRTOS port ---"
@@ -241,8 +249,8 @@ echo ""
 echo "Deploy to Orange Pi:"
 echo "  scp ${BD}/freertos_aarch64_orangepi.bin root@<orangepi-host>:/tmp/"
 echo "  # On Orange Pi u-boot console:"
-echo "  => fatload mmc 1:1 0x00200000 freertos_aarch64_orangepi.bin"
-echo "  => go 0x00200000"
+echo "  => fatload mmc 1:1 0x40000000 freertos_aarch64_orangepi.bin"
+echo "  => go 0x40000800"
 
 # ── Optionally flash ──────────────────────────────────────────────────────────
 if [ -n "$FLASH" ]; then

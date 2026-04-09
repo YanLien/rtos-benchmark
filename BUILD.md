@@ -254,13 +254,13 @@ qemu-system-aarch64 \
 3. 加载并启动：
    ```
    # 从 SD 卡加载
-   => load mmc 1:1 0x00200000 freertos_aarch64.bin
+   => load mmc 1:1 0x40000000 freertos_aarch64.bin
 
    # 或从 TFTP 加载
-   => tftp 0x00200000 freertos_aarch64.bin
+   => tftp 0x40000000 freertos_aarch64.bin
 
-   # 释放 CPU4 (第一个 Cortex-A76 核心) 到地址 0x00200000
-   => cpu 4 release 0x00200000
+   # 释放 CPU4 (第一个 Cortex-A76 核心) 到地址 0x40000000
+   => cpu 4 release 0x40000000
    ```
 
 4. 通过调试串口查看输出：
@@ -320,7 +320,7 @@ echo start > /sys/class/remoteproc/remoteproc0/state
 | GIC-600 Redistributor | `0xFD100000` | PPI 0-31 |
 | ARM Generic Timer | 系统寄存器 | CNTPCT_EL0, CNTP_TVAL_EL0 |
 | Timer EL1 Physical IRQ | 30 | GIC SPI 中断号 |
-| FreeRTOS 加载地址 | `0x00200000` | 预留 16MB 内存区域 |
+| FreeRTOS 加载地址 | `0x40000000` | 预留 16MB 内存区域 |
 
 ---
 
